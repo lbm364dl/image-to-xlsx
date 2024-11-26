@@ -3,8 +3,9 @@ import os
 import cv2
 
 from definitions import INPUT_PATH, OUTPUT_PATH
+from unskewing import correct_skew
+from binarization import binarize
 from PIL import Image
-from scipy.ndimage import rotate
 from surya.input.load import load_from_file
 from surya.settings import settings
 from surya.model.table_rec.model import load_model as load_model
@@ -37,47 +38,15 @@ class Table:
         
         self.pipeline = create_pipeline(pipeline="OCR")
     
-    def correct_skew(self, image, delta=1, limit=5, custom_angle=None):
-        def determine_score(arr, angle):
-            data = rotate(arr, angle, reshape=False, order=0)
-            histogram = np.sum(data, axis=1, dtype=float)
-            score = np.sum((histogram[1:] - histogram[:-1]) ** 2, dtype=float)
-            return histogram, score
-
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1] 
-    
-        scores = []
-        angles = np.arange(-limit, limit + delta, delta)
-        for angle in angles:
-            _, score = determine_score(thresh, angle)
-            scores.append(score)
-    
-        best_angle = angles[scores.index(max(scores))] if not custom_angle else custom_angle
-    
-        (h, w) = image.shape[:2]
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, best_angle, 1.0)
-        corrected = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-
-        return best_angle, corrected
 
     def rotate(self, delta=0.05, limit=5, custom_angle=None):
         for i, image in enumerate(self.images):
-            _, corrected = self.correct_skew(np.array(image), delta, limit, custom_angle)
+            _, corrected = correct_skew(np.array(image), delta, limit, custom_angle)
             self.images[i] = Image.fromarray(corrected)
     
     def binarize(self, method='otsu', block_size=None, constant=None):
         for i, highres_image in enumerate(self.highres_images):
-            gray_img = np.array(highres_image.convert('L'))
-            binarized = None
-            
-            if method == 'adaptive':
-                binarized = cv2.adaptiveThreshold(gray_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, constant)
-            elif method == 'otsu':
-                _, binarized = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            
-            self.highres_images[i] = Image.fromarray(binarized).convert('RGB')
+            self.highres_images[i] = binarize(highres_image, method, block_size, constant)
 
     def predict(self, heuristic_thresh=0.6):
         self.line_predictions = batch_text_detection(self.images, self.det_model, self.det_processor)
@@ -164,6 +133,7 @@ class Table:
 if __name__ == "__main__":
     input_doc = os.path.join(INPUT_PATH, 'saco_sample.pdf')
     t = Table(input_doc, rotation_delta=0.1, rotation_limit=5)
-    # t.binarize(method='adaptive', block_size=31, constant=10)
+    t.binarize(method='adaptive', block_size=31, constant=10)
+    t.highres_images[0].show()
     t.predict(heuristic_thresh=0.6)
-    t.build_table(pages=1, img_pad=100, compute_prefix=10**9, show_cropped_bboxes=False)
+    t.build_table(pages=1, img_pad=100, compute_prefix=50, show_cropped_bboxes=False)
