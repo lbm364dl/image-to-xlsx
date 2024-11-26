@@ -15,4 +15,7 @@ if __name__ == "__main__":
         t.binarize(method="adaptive", block_size=31, constant=10)
         t.image.show()
         t.predict(heuristic_thresh=0.6)
-        t.build_table(pages=1, img_pad=100, compute_prefix=50, show_cropped_bboxes=False)
+        t.build_table(img_pad=100, compute_prefix=50, show_cropped_bboxes=False)
+        print(t.table_output)
+        t.save_as_csv("my_table.csv")
+

@@ -1,4 +1,6 @@
+import os
 import numpy as np
+import cv2
 from definitions import OUTPUT_PATH
 from unskewing import correct_skew
 from binarization import binarize
@@ -61,12 +63,9 @@ class Table:
         [det_result] = batch_text_detection(
             [cropped_img], self.det_model, self.det_processor
         )
-        print('det_result', det_result)
         cell_bboxes = [{"bbox": tb.bbox, "text": ""} for tb in det_result.bboxes]
         self.table = {"bbox": bbox, "img": cropped_img, "bboxes": cell_bboxes}
 
-        print('cropped', cropped_img)
-        print('bbox', bbox)
         [table_pred] = batch_table_recognition(
             [cropped_img], [cell_bboxes], self.model, self.processor
         )
@@ -80,63 +79,59 @@ class Table:
         numeric = sum("0" <= c <= "9" for c in text)
         return numeric >= threshold * len(text)
 
-    def build_table(
-        self, pages="all", img_pad=600, compute_prefix=10, show_cropped_bboxes=False
-    ):
-        self.my_tables_predict = []
-        process_tables = self.tables if pages == "all" else self.tables[:pages]
-        for i, table in enumerate(process_tables):
-            n = max(cell.row_ids[0] + 1 for cell in table["cells"])
-            m = max(cell.col_ids[0] + 1 for cell in table["cells"])
-            table_output = [[[] for _ in range(m)] for _ in range(n)]
-            cropped_imgs = []
-            for cell in table["cells"][:compute_prefix]:
-                cropped_img = np.array(table["img"].crop(cell.bbox))
-                cropped_img = np.pad(
-                    cropped_img,
-                    ((img_pad, img_pad), (img_pad, img_pad), (0, 0)),
-                    mode="constant",
-                    constant_values=255,
-                )
-                if show_cropped_bboxes:
-                    Image.fromarray(cropped_img).show()
-                cropped_imgs.append(cropped_img)
+    def build_table(self, img_pad=600, compute_prefix=10, show_cropped_bboxes=False):
+        n = max(cell.row_ids[0] + 1 for cell in self.table["cells"])
+        m = max(cell.col_ids[0] + 1 for cell in self.table["cells"])
+        self.table_output = [[[] for _ in range(m)] for _ in range(n)]
+        cropped_imgs = []
+        for cell in self.table["cells"][:compute_prefix]:
+            cropped_img = np.array(self.table["img"].crop(cell.bbox))
+            cropped_img = np.pad(
+                cropped_img,
+                ((img_pad, img_pad), (img_pad, img_pad), (0, 0)),
+                mode="constant",
+                constant_values=255,
+            )
+            if show_cropped_bboxes:
+                Image.fromarray(cropped_img).show()
+            cropped_imgs.append(cropped_img)
 
-            output = list(self.pipeline.predict(cropped_imgs))
-            self.my_tables_predict.append(output)
+        output = list(self.pipeline.predict(cropped_imgs))
+        self.table_predict = output
 
-            for cell, pred in zip(table["cells"], output):
-                row_ids, col_ids = cell.row_ids, cell.col_ids
-                row_id, col_id = row_ids[0], col_ids[0]
-                add_text = " ".join(pred["rec_text"])
-                if self.is_numeric_cell(add_text):
-                    add_text = add_text.replace(".", "").replace(",", "")
-                if add_text:
-                    table_output[row_id][col_id].append(add_text)
+        for cell, pred in zip(self.table["cells"], output):
+            row_ids, col_ids = cell.row_ids, cell.col_ids
+            row_id, col_id = row_ids[0], col_ids[0]
+            add_text = " ".join(pred["rec_text"])
+            if self.is_numeric_cell(add_text):
+                add_text = add_text.replace(".", "").replace(",", "")
+            if add_text:
+                self.table_output[row_id][col_id].append(add_text)
 
-            output_path = os.path.join(OUTPUT_PATH, f"my_custom_table_{i}.csv")
-            with open(output_path, "w") as f_out:
-                split_table = []
-                for row in table_output:
-                    rows = []
-                    for j, col in enumerate(row):
-                        for i, part in enumerate(col):
-                            if len(rows) <= i:
-                                rows.append([""] * len(row))
-                            rows[i][j] = part
+        split_table = []
+        for row in self.table_output:
+            rows = []
+            for j, col in enumerate(row):
+                for i, part in enumerate(col):
+                    if len(rows) <= i:
+                        rows.append([""] * len(row))
+                    rows[i][j] = part
 
-                    split_table += rows
+            split_table += rows
 
-                mean_row_length = sum(len("".join(row)) for row in split_table) / len(
-                    split_table
-                )
-                output = "\n".join([
-                    ";".join(row)
-                    for row in split_table
-                    if len("".join(row)) / mean_row_length > 0.1
-                ])
-                print(output)
-                f_out.write(output)
+        mean_row_length = sum(len("".join(row)) for row in split_table) / len(
+            split_table
+        )
+        self.table_output = [
+            row for row in split_table if len("".join(row)) / mean_row_length > 0.1
+        ]
+
+    def save_as_csv(self, csv_name):
+        output_path = os.path.join(OUTPUT_PATH, csv_name)
+        with open(output_path, "w") as f_out:
+            output = "\n".join([";".join(row) for row in self.table_output])
+            print(output)
+            f_out.write(output)
 
     def visualize_bboxes(self, img, bboxes):
         visualize_img = np.array(img, dtype=np.uint8)
