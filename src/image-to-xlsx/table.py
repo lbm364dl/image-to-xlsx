@@ -1,17 +1,11 @@
 import os
 import numpy as np
 import cv2
+import pretrained
 from definitions import OUTPUT_PATH
 from unskewing import correct_skew
 from binarization import binarize
 from PIL import Image
-from surya.settings import settings
-from surya.model.table_rec.model import load_model as load_model
-from surya.model.table_rec.processor import load_processor
-from surya.model.detection.model import (
-    load_model as load_det_model,
-    load_processor as load_det_processor,
-)
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
 from surya.tables import batch_table_recognition
@@ -20,20 +14,23 @@ from paddlex import create_pipeline
 
 
 class Table:
-    def __init__(self, image):
+    def __init__(
+        self,
+        image,
+        model=None,
+        processor=None,
+        det_model=None,
+        det_processor=None,
+        layout_model=None,
+        layout_processor=None,
+    ):
         self.image = image
-
-        self.model = load_model()
-        self.processor = load_processor()
-
-        self.layout_model = load_det_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
-        self.layout_processor = load_det_processor(
-            checkpoint=settings.LAYOUT_MODEL_CHECKPOINT
-        )
-
-        self.det_model = load_det_model()
-        self.det_processor = load_det_processor()
-
+        self.model = model or pretrained.model
+        self.processor = processor or pretrained.processor
+        self.det_model = det_model or pretrained.det_model
+        self.det_processor = det_processor or pretrained.det_processor
+        self.layout_model = layout_model or pretrained.layout_model
+        self.layout_processor = layout_processor or pretrained.layout_processor
         self.pipeline = create_pipeline(pipeline="OCR")
 
     def rotate(self, delta=0.05, limit=5, custom_angle=None):
@@ -43,28 +40,28 @@ class Table:
     def binarize(self, method="otsu", block_size=None, constant=None):
         self.image = binarize(self.image, method, block_size, constant)
 
-    def predict(self, heuristic_thresh=0.6):
-        [self.line_prediction] = batch_text_detection(
+    def detect_tables(self):
+        [line_prediction] = batch_text_detection(
             [self.image], self.det_model, self.det_processor
         )
-        [self.layout_prediction] = batch_layout_detection(
+        [layout_prediction] = batch_layout_detection(
             [self.image],
             self.layout_model,
             self.layout_processor,
-            [self.line_prediction],
+            [line_prediction],
         )
 
-        [table] = [
-            bbox for bbox in self.layout_prediction.bboxes if bbox.label == "Table"
-        ]
-        bbox = table.bbox
-        cropped_img = self.image.crop(bbox)
+        return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
+
+    def recognize_table_structure(self, heuristic_thresh=0.6):
+        [table] = self.detect_tables()
+        cropped_img = self.image.crop(table.bbox)
 
         [det_result] = batch_text_detection(
             [cropped_img], self.det_model, self.det_processor
         )
         cell_bboxes = [{"bbox": tb.bbox, "text": ""} for tb in det_result.bboxes]
-        self.table = {"bbox": bbox, "img": cropped_img, "bboxes": cell_bboxes}
+        self.table = {"bbox": table.bbox, "img": cropped_img, "bboxes": cell_bboxes}
 
         [table_pred] = batch_table_recognition(
             [cropped_img], [cell_bboxes], self.model, self.processor
@@ -73,7 +70,6 @@ class Table:
         self.table["cells"] = assign_rows_columns(
             table_pred, self.table["img"].size, heuristic_thresh
         )
-        self.table["pred"] = table_pred
 
     def is_numeric_cell(self, text, threshold=0.6):
         numeric = sum("0" <= c <= "9" for c in text)
