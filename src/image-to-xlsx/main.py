@@ -31,10 +31,6 @@ class Table:
             delta=rotation_delta, limit=rotation_limit, custom_angle=custom_angle
         )
 
-        self.highres_images = []
-        for image in self.images:
-            self.highres_images.append(image)
-
         self.model = load_model()
         self.processor = load_processor()
 
@@ -54,10 +50,8 @@ class Table:
             self.images[i] = Image.fromarray(corrected)
 
     def binarize(self, method="otsu", block_size=None, constant=None):
-        for i, highres_image in enumerate(self.highres_images):
-            self.highres_images[i] = binarize(
-                highres_image, method, block_size, constant
-            )
+        for i, img in enumerate(self.images):
+            self.images[i] = binarize(img, method, block_size, constant)
 
     def predict(self, heuristic_thresh=0.6):
         self.line_predictions = batch_text_detection(
@@ -68,22 +62,16 @@ class Table:
         )
         self.table_cells = []
         self.tables = []
-        for pred, img, highres_img in zip(
-            self.layout_predictions, self.images, self.highres_images
-        ):
+        for pred, img in zip(self.layout_predictions, self.images):
             [table] = [bbox for bbox in pred.bboxes if bbox.label == "Table"]
-            highres_bbox = rescale_bbox(table.bbox, img.size, highres_img.size)
-            cropped_highres_img = highres_img.crop(highres_bbox)
+            bbox = rescale_bbox(table.bbox, img.size, img.size)
+            cropped_img = img.crop(bbox)
 
             [det_result] = batch_text_detection(
-                [cropped_highres_img], self.det_model, self.det_processor
+                [cropped_img], self.det_model, self.det_processor
             )
             cell_bboxes = [{"bbox": tb.bbox, "text": ""} for tb in det_result.bboxes]
-            table = {
-                "bbox": highres_bbox,
-                "img": cropped_highres_img,
-                "bboxes": cell_bboxes,
-            }
+            table = {"bbox": bbox, "img": cropped_img, "bboxes": cell_bboxes}
             self.tables.append(table)
 
         table_preds = batch_table_recognition(
@@ -92,9 +80,7 @@ class Table:
             self.model,
             self.processor,
         )
-        for table_pred, table, original_image in zip(
-            table_preds, self.tables, self.images
-        ):
+        for table_pred, table in zip(table_preds, self.tables):
             table["cells"] = assign_rows_columns(
                 table_pred, table["img"].size, heuristic_thresh
             )
@@ -179,7 +165,7 @@ class Table:
 if __name__ == "__main__":
     input_doc = os.path.join(INPUT_PATH, "saco_sample.pdf")
     t = Table(input_doc, rotation_delta=0.1, rotation_limit=5)
-    t.binarize(method="adaptive", block_size=31, constant=10)
-    t.highres_images[0].show()
+    # t.binarize(method="adaptive", block_size=31, constant=10)
+    t.images[0].show()
     t.predict(heuristic_thresh=0.6)
     t.build_table(pages=1, img_pad=100, compute_prefix=50, show_cropped_bboxes=False)
