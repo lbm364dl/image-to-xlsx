@@ -75,10 +75,7 @@ class Table:
         numeric = sum("0" <= c <= "9" for c in text)
         return numeric >= threshold * len(text)
 
-    def build_table(self, img_pad=600, compute_prefix=10, show_cropped_bboxes=False):
-        n = max(cell.row_ids[0] + 1 for cell in self.table["cells"])
-        m = max(cell.col_ids[0] + 1 for cell in self.table["cells"])
-        self.table_output = [[[] for _ in range(m)] for _ in range(n)]
+    def get_cropped_cell_images(self, img_pad, compute_prefix, show_cropped_bboxes):
         cropped_imgs = []
         for cell in self.table["cells"][:compute_prefix]:
             cropped_img = np.array(self.table["img"].crop(cell.bbox))
@@ -92,8 +89,16 @@ class Table:
                 Image.fromarray(cropped_img).show()
             cropped_imgs.append(cropped_img)
 
-        output = list(self.pipeline.predict(cropped_imgs))
-        self.table_predict = output
+        return cropped_imgs
+
+    def recognize_texts(self, img_pad, compute_prefix, show_cropped_bboxes):
+        n = max(cell.row_ids[0] + 1 for cell in self.table["cells"])
+        m = max(cell.col_ids[0] + 1 for cell in self.table["cells"])
+        table_output = [[[] for _ in range(m)] for _ in range(n)]
+        cropped_imgs = self.get_cropped_cell_images(
+            img_pad, compute_prefix, show_cropped_bboxes
+        )
+        output = self.pipeline.predict(cropped_imgs)
 
         for cell, pred in zip(self.table["cells"], output):
             row_ids, col_ids = cell.row_ids, cell.col_ids
@@ -102,10 +107,13 @@ class Table:
             if self.is_numeric_cell(add_text):
                 add_text = add_text.replace(".", "").replace(",", "")
             if add_text:
-                self.table_output[row_id][col_id].append(add_text)
+                table_output[row_id][col_id].append(add_text)
 
+        return table_output
+
+    def extend_rows(self, table_output):
         split_table = []
-        for row in self.table_output:
+        for row in table_output:
             rows = []
             for j, col in enumerate(row):
                 for i, part in enumerate(col):
@@ -115,12 +123,21 @@ class Table:
 
             split_table += rows
 
-        mean_row_length = sum(len("".join(row)) for row in split_table) / len(
-            split_table
-        )
-        self.table_output = [
-            row for row in split_table if len("".join(row)) / mean_row_length > 0.1
+        return split_table
+
+    def remove_low_content_rows(self, table_output):
+        total_row_lengths = sum(len("".join(row)) for row in table_output)
+        mean_row_length = total_row_lengths / len(table_output)
+        return [
+            row for row in table_output if len("".join(row)) / mean_row_length > 0.1
         ]
+
+    def build_table(self, img_pad=100, compute_prefix=10**9, show_cropped_bboxes=False):
+        table_output = self.recognize_texts(
+            img_pad, compute_prefix, show_cropped_bboxes
+        )
+        table_output = self.extend_rows(table_output)
+        self.table_output = self.remove_low_content_rows(table_output)
 
     def save_as_csv(self, csv_name):
         output_path = os.path.join(OUTPUT_PATH, csv_name)

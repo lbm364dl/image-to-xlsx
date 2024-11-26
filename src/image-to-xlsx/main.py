@@ -27,9 +27,9 @@ if __name__ == "__main__":
             layout_processor,
         )
         t.rotate(delta=0.1, limit=5)
-        t.binarize(method="adaptive", block_size=31, constant=10)
-        t.image.show()
+        # t.binarize(method="adaptive", block_size=31, constant=10)
+        # t.image.show()
         t.recognize_table_structure(heuristic_thresh=0.6)
-        t.build_table(img_pad=100, compute_prefix=10**9, show_cropped_bboxes=False)
+        t.build_table(img_pad=100, compute_prefix=30)
         print(t.table_output)
         t.save_as_csv(f"my_table_{i}.csv")
