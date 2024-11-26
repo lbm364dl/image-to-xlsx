@@ -10,7 +10,6 @@ from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
 from surya.tables import batch_table_recognition
 from tabled.assignment import assign_rows_columns
-from paddlex import create_pipeline
 
 
 class Table:
@@ -23,6 +22,7 @@ class Table:
         det_processor=None,
         layout_model=None,
         layout_processor=None,
+        ocr_pipeline=None,
     ):
         self.image = image
         self.model = model or pretrained.model
@@ -31,7 +31,7 @@ class Table:
         self.det_processor = det_processor or pretrained.det_processor
         self.layout_model = layout_model or pretrained.layout_model
         self.layout_processor = layout_processor or pretrained.layout_processor
-        self.pipeline = create_pipeline(pipeline="OCR")
+        self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
 
     def rotate(self, delta=0.05, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.image), delta, limit, custom_angle)

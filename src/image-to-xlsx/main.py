@@ -12,6 +12,7 @@ if __name__ == "__main__":
     layout_processor = pretrained.layout_processor
     det_model = pretrained.det_model
     det_processor = pretrained.det_processor
+    ocr_pipeline = pretrained.ocr_pipeline
 
     input_doc = os.path.join(INPUT_PATH, "saco_sample.pdf")
     d = Document(path=input_doc)
@@ -25,11 +26,12 @@ if __name__ == "__main__":
             det_processor,
             layout_model,
             layout_processor,
+            ocr_pipeline
         )
         t.rotate(delta=0.1, limit=5)
         # t.binarize(method="adaptive", block_size=31, constant=10)
         # t.image.show()
         t.recognize_table_structure(heuristic_thresh=0.6)
-        t.build_table(img_pad=100, compute_prefix=30)
+        t.build_table(img_pad=100, compute_prefix=50)
         print(t.table_output)
         t.save_as_csv(f"my_table_{i}.csv")
