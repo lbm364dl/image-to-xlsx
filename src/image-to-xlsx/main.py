@@ -1,6 +1,8 @@
 import numpy as np
+import os
 import cv2
 
+from definitions import INPUT_PATH, OUTPUT_PATH
 from PIL import Image
 from scipy.ndimage import rotate
 from surya.input.load import load_from_file
@@ -117,7 +119,6 @@ class Table:
                 cropped_imgs.append(cropped_img)
                         
             output = list(self.pipeline.predict(cropped_imgs))
-            print(output)
             self.my_tables_predict.append(output)
             
             for cell, pred in zip(table['cells'], output):
@@ -129,10 +130,10 @@ class Table:
                 if add_text:
                     table_output[row_id][col_id].append(add_text)
     
-            with open(f'./output/my_custom_table_{i}.csv', 'w') as f_out:
+            output_path = os.path.join(OUTPUT_PATH, f'my_custom_table_{i}.csv')
+            with open(output_path, 'w') as f_out:
                 split_table = []
                 for row in table_output:
-                    print('row', row)
                     rows = []
                     for j, col in enumerate(row):
                         for i, part in enumerate(col):
@@ -140,7 +141,6 @@ class Table:
                                 rows.append(['']*len(row))
                             rows[i][j] = part
 
-                    print('rows', rows)
 
                     split_table += rows
 
@@ -148,9 +148,6 @@ class Table:
                 output = '\n'.join([';'.join(row) for row in split_table if len(''.join(row))/mean_row_length > 0.1])
                 print(output)
                 f_out.write(output)
-                
-    def downscale(self, bboxes):
-        return [x//self.scale for x in bboxes]
     
     def visualize_bboxes(self, img, bboxes):
         visualize_img = np.array(img, dtype=np.uint8)
@@ -165,7 +162,8 @@ class Table:
 
 
 if __name__ == "__main__":
-    t = Table('test_hathitrust.png', rotation_delta=0.1, rotation_limit=5)
-    t.highres_images[0].show()
+    input_doc = os.path.join(INPUT_PATH, 'saco_sample.pdf')
+    t = Table(input_doc, rotation_delta=0.1, rotation_limit=5)
+    # t.binarize(method='adaptive', block_size=31, constant=10)
     t.predict(heuristic_thresh=0.6)
     t.build_table(pages=1, img_pad=100, compute_prefix=10**9, show_cropped_bboxes=False)
