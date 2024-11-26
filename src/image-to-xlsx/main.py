@@ -16,7 +16,6 @@ from surya.model.detection.model import (
 )
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
-from surya.postprocessing.util import rescale_bbox
 from surya.tables import batch_table_recognition
 from tabled.assignment import assign_rows_columns
 from paddlex import create_pipeline
@@ -64,7 +63,7 @@ class Table:
         self.tables = []
         for pred, img in zip(self.layout_predictions, self.images):
             [table] = [bbox for bbox in pred.bboxes if bbox.label == "Table"]
-            bbox = rescale_bbox(table.bbox, img.size, img.size)
+            bbox = table.bbox
             cropped_img = img.crop(bbox)
 
             [det_result] = batch_text_detection(
