@@ -12,4 +12,8 @@ python -m pip install https://paddle-model-ecology.bj.bcebos.com/paddlex/whl/pad
 python -m pip install surya-ocr
 # install tabled-pdf
 python -m pip install tabled-pdf
+# install openai for postprocessing
+python -m pip install openai
+# install python-dotenv for reading env vars
+python -m pip install python-dotenv
 ```

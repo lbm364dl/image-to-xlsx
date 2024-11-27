@@ -2,6 +2,7 @@ import os
 import numpy as np
 import cv2
 import pretrained
+from postprocessing import nlp_clean
 from definitions import OUTPUT_PATH
 from unskewing import correct_skew
 from binarization import binarize
@@ -139,6 +140,9 @@ class Table:
         table_output = self.extend_rows(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 
+    def nlp_postprocess(self):
+        self.table_output = nlp_clean(self.table_output)
+
     def save_as_csv(self, csv_name):
         output_path = os.path.join(OUTPUT_PATH, csv_name)
         with open(output_path, "w") as f_out:
@@ -156,5 +160,7 @@ class Table:
 
         Image.fromarray(visualize_img).show()
 
-    def visualize_table_bboxes(self, table):
-        self.visualize_bboxes(table["img"], [c["bbox"] for c in table["bboxes"]])
+    def visualize_table_bboxes(self):
+        self.visualize_bboxes(
+            self.table["img"], [c["bbox"] for c in self.table["bboxes"]]
+        )
