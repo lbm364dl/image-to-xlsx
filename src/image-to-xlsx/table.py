@@ -120,11 +120,9 @@ class Table:
     def nlp_postprocess(self, text_language="en"):
         self.table_output = nlp_clean(self.table_output, text_language)
 
-    def save_as_csv(self, csv_name):
-        output_path = os.path.join(OUTPUT_PATH, csv_name)
+    def save_as_csv(self, output_path):
         with open(output_path, "w") as f_out:
             output = "\n".join([";".join(row) for row in self.table_output])
-            print(output)
             f_out.write(output)
 
     def visualize_bboxes(self, img, bboxes):

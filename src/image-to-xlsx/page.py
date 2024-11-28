@@ -13,6 +13,7 @@ class Page:
         self,
         image,
         page_num,
+        document_results_dir,
         model=None,
         processor=None,
         det_model=None,
@@ -23,6 +24,7 @@ class Page:
     ):
         self.image = image
         self.page_num = page_num
+        self.document_results_dir = document_results_dir
         self.model = model or pretrained.model()
         self.processor = processor or pretrained.processor()
         self.det_model = det_model or pretrained.det_model()
@@ -79,4 +81,6 @@ class Page:
             if nlp_postprocess:
                 t.nlp_postprocess(text_language)
 
-            t.save_as_csv(f"page_{self.page_num}_table_{i + 1}.csv")
+            t.save_as_csv(
+                self.document_results_dir / f"page_{self.page_num}_table_{i + 1}.csv"
+            )

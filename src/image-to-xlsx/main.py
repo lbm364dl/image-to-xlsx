@@ -1,4 +1,6 @@
+import os
 from cli import parse_args
+from pathlib import Path
 
 
 if __name__ == "__main__":
@@ -8,13 +10,16 @@ if __name__ == "__main__":
     from document import Document
     from page import Page
 
-    input_doc = args.input_path
-    d = Document(path=input_doc)
+    input_dir = Path(os.path.dirname(args.input_path))
+    results_dir = input_dir / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    d = Document(args.input_path, results_dir)
 
     first_page = args.first_page - 1
     last_page = args.last_page - 1
     for i, img in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
-        p = Page(img, i, **pretrained.all_models())
+        p = Page(img, i, d.document_results_dir, **pretrained.all_models())
         p.image.show()
         p.rotate(delta=0.1, limit=5)
 
