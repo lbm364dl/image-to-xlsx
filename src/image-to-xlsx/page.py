@@ -78,4 +78,4 @@ class Page:
             if nlp_postprocess:
                 t.nlp_postprocess()
 
-            t.save_as_csv(f"page_{self.page_num}_table_{i}.csv")
+            t.save_as_csv(f"page_{self.page_num}_table_{i + 1}.csv")

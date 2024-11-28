@@ -8,14 +8,6 @@ if __name__ == "__main__":
     from document import Document
     from page import Page
 
-    model = pretrained.model()
-    processor = pretrained.processor()
-    layout_model = pretrained.layout_model()
-    layout_processor = pretrained.layout_processor()
-    det_model = pretrained.det_model()
-    det_processor = pretrained.det_processor()
-    ocr_pipeline = pretrained.ocr_pipeline()
-
     input_doc = args.input_path
     d = Document(path=input_doc)
 
