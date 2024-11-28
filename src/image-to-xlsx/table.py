@@ -2,7 +2,6 @@ import os
 import numpy as np
 import cv2
 import pretrained
-from postprocessing import nlp_clean
 from definitions import OUTPUT_PATH
 from PIL import Image
 from surya.detection import batch_text_detection
@@ -118,6 +117,7 @@ class Table:
         self.table_output = self.remove_low_content_rows(table_output)
 
     def nlp_postprocess(self, text_language="en"):
+        from postprocessing import nlp_clean
         self.table_output = nlp_clean(self.table_output, text_language)
 
     def save_as_csv(self, output_path):
