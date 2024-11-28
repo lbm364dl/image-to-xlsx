@@ -7,10 +7,42 @@ from surya.model.detection.model import (
     load_processor as load_det_processor,
 )
 
-model = load_model()
-processor = load_processor()
-layout_model = load_det_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
-layout_processor = load_det_processor(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
-det_model = load_det_model()
-det_processor = load_det_processor()
-ocr_pipeline = create_pipeline(pipeline="OCR")
+
+def model():
+    return load_model()
+
+
+def processor():
+    return load_processor()
+
+
+def layout_model():
+    return load_det_model(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
+
+
+def layout_processor():
+    return load_det_processor(checkpoint=settings.LAYOUT_MODEL_CHECKPOINT)
+
+
+def det_model():
+    return load_det_model()
+
+
+def det_processor():
+    return load_det_processor()
+
+
+def ocr_pipeline():
+    return create_pipeline(pipeline="OCR")
+
+
+def all_models():
+    return {
+        "model": model(),
+        "processor": processor(),
+        "layout_model": layout_model(),
+        "layout_processor": layout_processor(),
+        "det_model": det_model(),
+        "det_processor": det_processor(),
+        "ocr_pipeline": ocr_pipeline(),
+    }

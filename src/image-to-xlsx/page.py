@@ -23,13 +23,13 @@ class Page:
     ):
         self.image = image
         self.page_num = page_num
-        self.model = model or pretrained.model
-        self.processor = processor or pretrained.processor
-        self.det_model = det_model or pretrained.det_model
-        self.det_processor = det_processor or pretrained.det_processor
-        self.layout_model = layout_model or pretrained.layout_model
-        self.layout_processor = layout_processor or pretrained.layout_processor
-        self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline
+        self.model = model or pretrained.model()
+        self.processor = processor or pretrained.processor()
+        self.det_model = det_model or pretrained.det_model()
+        self.det_processor = det_processor or pretrained.det_processor()
+        self.layout_model = layout_model or pretrained.layout_model()
+        self.layout_processor = layout_processor or pretrained.layout_processor()
+        self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline()
 
     def rotate(self, delta=0.05, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.image), delta, limit, custom_angle)
@@ -57,6 +57,7 @@ class Page:
         img_pad=100,
         compute_prefix=50,
         show_cropped_bboxes=False,
+        nlp_postprocess=False,
     ):
         tables = self.detect_tables()
 
@@ -74,8 +75,7 @@ class Page:
             t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
             t.visualize_table_bboxes()
 
-            # uses non-free openai API to try to fix misspelled words
-            # you can skip it otherwise
-            t.nlp_postprocess()
+            if nlp_postprocess:
+                t.nlp_postprocess()
 
             t.save_as_csv(f"page_{self.page_num}_table_{i}.csv")
