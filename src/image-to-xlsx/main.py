@@ -20,7 +20,6 @@ if __name__ == "__main__":
     last_page = args.last_page - 1
     for i, img in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
         p = Page(img, i, d.document_results_dir, **pretrained.all_models())
-        p.image.show()
         p.rotate(delta=0.1, limit=5)
 
         if args.binarize:
@@ -30,7 +29,7 @@ if __name__ == "__main__":
         p.recognize_tables_structure(
             heuristic_thresh=0.6,
             img_pad=100,
-            compute_prefix=50,
+            compute_prefix=10**9,
             nlp_postprocess=args.nlp_postprocess,
             text_language=args.text_language,
         )
