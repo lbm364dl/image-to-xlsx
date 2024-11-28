@@ -117,8 +117,8 @@ class Table:
         table_output = self.extend_rows(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 
-    def nlp_postprocess(self):
-        self.table_output = nlp_clean(self.table_output)
+    def nlp_postprocess(self, text_language="en"):
+        self.table_output = nlp_clean(self.table_output, text_language)
 
     def save_as_csv(self, csv_name):
         output_path = os.path.join(OUTPUT_PATH, csv_name)

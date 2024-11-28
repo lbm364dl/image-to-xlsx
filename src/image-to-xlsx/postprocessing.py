@@ -23,8 +23,7 @@ def nlp_clean(table, lang="en"):
                 "role": "user",
                 "content": f"""
             Can you try to fix this structured data? Some information:
-            - Assume words are in {lang_name[lang]}
-            - There are words that should be country names that may contain spelling mistakes in {lang_name[lang]}
+            - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
             - If you find Chinese characters, remove them
             - Do not add any new separators
             - Remove column with number indexes if there is one
@@ -35,10 +34,7 @@ def nlp_clean(table, lang="en"):
         ],
     )
 
-    print(output.choices[0].message.content)
     content = output.choices[0].message.content.strip("```").strip()
-    print(content)
-
     return csv_to_table(content)
 
 

@@ -27,4 +27,5 @@ if __name__ == "__main__":
             img_pad=100,
             compute_prefix=50,
             nlp_postprocess=args.nlp_postprocess,
+            text_language=args.text_language,
         )

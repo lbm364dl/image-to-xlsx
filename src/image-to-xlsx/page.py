@@ -58,6 +58,7 @@ class Page:
         compute_prefix=50,
         show_cropped_bboxes=False,
         nlp_postprocess=False,
+        text_language="en",
     ):
         tables = self.detect_tables()
 
@@ -76,6 +77,6 @@ class Page:
             t.visualize_table_bboxes()
 
             if nlp_postprocess:
-                t.nlp_postprocess()
+                t.nlp_postprocess(text_language)
 
             t.save_as_csv(f"page_{self.page_num}_table_{i + 1}.csv")
