@@ -16,7 +16,7 @@ env\Scripts\activate
 python -m pip install -r requirements_windows.txt --no-deps
 ```
 
-For trying to reproduce the code if requirements.txt or requirements_windows.txt fails, do the following installs in order:
+For trying to reproduce the code if `requirements.txt` or `requirements_windows.txt` fails, do the following installs in order:
 
 ```
 # install torch (choose one)
@@ -32,7 +32,7 @@ python -m pip install tabled-pdf==0.1.4
 python -m pip install openai
 ```
 
-To use the program, you can run `python main.py --help` from src/image-to-xlsx to see the help for all options:
+To use the program, you can run `python main.py --help` from `src/image-to-xlsx` to see the help for all options:
 
 ```
 usage: main.py [-h] [--first-page FIRST_PAGE] [--last-page LAST_PAGE] [--binarize {0,1}] [--nlp-postprocess {0,1}] [--text-language TEXT_LANGUAGE] input_path
