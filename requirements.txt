@@ -103,7 +103,7 @@ openpyxl==3.1.5
 opt-einsum==3.3.0
 orderly-set==5.2.2
 packaging==23.2
-paddlepaddle==3.0.0b2
+paddlepaddle==3.0.0b1
 paddlex @ https://paddle-model-ecology.bj.bcebos.com/paddlex/whl/paddlex-3.0.0b1-py3-none-any.whl
 pandas==2.2.3
 Parsley==1.3
