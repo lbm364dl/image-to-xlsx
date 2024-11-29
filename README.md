@@ -52,7 +52,7 @@ the C++ segfault. Still, these same nvidia dependencies seem to be the ones fail
 
 To use the program, you can run `python main.py --help` from src/image-to-xlsx to see the help for all options:
 
-
+```
 usage: main.py [-h] [--first-page FIRST_PAGE] [--last-page LAST_PAGE] [--binarize {0,1}] [--nlp-postprocess {0,1}] [--text-language TEXT_LANGUAGE] input_path
 
 Convert tables from image/pdf to xlsx.
@@ -71,5 +71,5 @@ options:
                         Use non-free OpenAI to try to fix OCR misspellings (0 for no, 1 for yes). Default 0
   --text-language TEXT_LANGUAGE
                         ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'
-
+```
 For example, you can run `python main.py path/to/input.pdf`.
