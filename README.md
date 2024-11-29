@@ -4,9 +4,12 @@ It is highly recommended to use a virtual environment. Inside it you can then ru
 ```
 python -m pip install -r requirements.txt --no-deps
 ```
-TODO: Currently it will probably fail in Windows due to some dependency errors.
+There are some small tweaks for dependencies to work on Windows. For this you can instead try
+```
+python -m pip install -r requirements_windows.txt --no-deps
+```
 
-For trying to reproduce the code if requirements.txt fails, do the following installs in order:
+For trying to reproduce the code if requirements.txt or requirements_windows.txt fails, do the following installs in order:
 TODO: it seems this also fails (on runtime) due to some C++ segfault, again something about dependencies.
 
 ```
