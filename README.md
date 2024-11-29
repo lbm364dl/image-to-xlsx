@@ -1,3 +1,5 @@
+WIP
+
 It is highly recommended to use a virtual environment. Inside it you can then run
 ```
 python -m pip install -r requirements.txt --no-deps
@@ -46,3 +48,28 @@ python -m pip install opencv-python==4.5.5.64
 The previous step-by-step installation still fails. The only one that seems to work right now is Linux using --no-deps installation from requirements.txt,
 which also includes some nvidia dependencies which again should not be needed for running on CPU but it seems they come with some libraries that fix
 the C++ segfault. Still, these same nvidia dependencies seem to be the ones failing on Windows installation.
+
+
+To use the program, you can run `python main.py --help` from src/image-to-xlsx to see the help for all options:
+
+
+usage: main.py [-h] [--first-page FIRST_PAGE] [--last-page LAST_PAGE] [--binarize {0,1}] [--nlp-postprocess {0,1}] [--text-language TEXT_LANGUAGE] input_path
+
+Convert tables from image/pdf to xlsx.
+
+positional arguments:
+  input_path            Path to PDF or image file.
+
+options:
+  -h, --help            show this help message and exit
+  --first-page FIRST_PAGE
+                        First page to process (for PDFs only, 1-indexed). Default start of document
+  --last-page LAST_PAGE
+                        Last page to process (for PDFs only, 1-indexed). Default end of document
+  --binarize {0,1}      Use binarization, i.e. force black & white pixels (0 for no, 1 for yes). Default 0
+  --nlp-postprocess {0,1}
+                        Use non-free OpenAI to try to fix OCR misspellings (0 for no, 1 for yes). Default 0
+  --text-language TEXT_LANGUAGE
+                        ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'
+
+For example, you can run `python main.py path/to/input.pdf`.
