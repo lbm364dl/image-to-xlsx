@@ -1,30 +1,22 @@
 WIP
 
-It is highly recommended to use a virtual environment. Inside it you can then run
+It is highly recommended to use a virtual environment. After cloning this repository, from its root directory do:
+
+Linux:
 ```
+python3 -m venv env
+source env/bin/activate
 python -m pip install -r requirements.txt --no-deps
 ```
-There are some small tweaks for dependencies to work on Windows. For this you can instead try
+
+Windows:
 ```
+python3 -m venv env
+env\Scripts\activate
 python -m pip install -r requirements_windows.txt --no-deps
 ```
 
 For trying to reproduce the code if requirements.txt or requirements_windows.txt fails, do the following installs in order:
-TODO: it seems this also fails (on runtime) due to some C++ segfault, again something about dependencies.
-
-```
-# install paddlepaddle
-python -m pip install paddlepaddle==3.0.0b2 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
-# install paddlex
-python -m pip install https://paddle-model-ecology.bj.bcebos.com/paddlex/whl/paddlex-3.0.0b2-py3-none-any.whl
-# install tabled-pdf
-python -m pip install tabled-pdf==0.1.4
-# install openai for postprocessing (optional)
-python -m pip install openai
-```
-
-The previous step-by-step installations will likely also install some nvidia dependencies along with surya-ocr,
-which in theory should not, if you want to run on CPU. For this we should first manually install CPU version of pytorch...
 
 ```
 # install torch (choose one)
@@ -39,9 +31,6 @@ python -m pip install tabled-pdf==0.1.4
 # install openai for postprocessing (optional)
 python -m pip install openai
 ```
-
-The previous step-by-step installation seems to work on Windows and fail on Linux. For Linux, the only one that seems to work right now is using --no-deps installation from requirements.txt, which also includes some nvidia dependencies which again should not be needed for running on CPU but it seems they come with some libraries that fix the C++ segfault.
-
 
 To use the program, you can run `python main.py --help` from src/image-to-xlsx to see the help for all options:
 
