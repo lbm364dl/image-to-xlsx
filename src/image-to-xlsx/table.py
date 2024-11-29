@@ -121,7 +121,7 @@ class Table:
         self.table_output = nlp_clean(self.table_output, text_language)
 
     def save_as_csv(self, output_path):
-        with open(output_path, "w") as f_out:
+        with open(output_path, "w", encoding="utf-8") as f_out:
             output = "\n".join([";".join(row) for row in self.table_output])
             f_out.write(output)
 
