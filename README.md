@@ -17,40 +17,30 @@ TODO: it seems this also fails (on runtime) due to some C++ segfault, again some
 python -m pip install paddlepaddle==3.0.0b2 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 # install paddlex
 python -m pip install https://paddle-model-ecology.bj.bcebos.com/paddlex/whl/paddlex-3.0.0b2-py3-none-any.whl
-# install surya-ocr
-python -m pip install surya-ocr
 # install tabled-pdf
-python -m pip install tabled-pdf
+python -m pip install tabled-pdf==0.1.4
 # install openai for postprocessing (optional)
 python -m pip install openai
-# override opencv version
-python -m pip install opencv-python==4.5.5.64
 ```
 
 The previous step-by-step installations will likely also install some nvidia dependencies along with surya-ocr,
 which in theory should not, if you want to run on CPU. For this we should first manually install CPU version of pytorch...
 
 ```
-# install torch
+# install torch (choose one)
 python -m pip install torch # Mac/Windows (should be CPU by default)
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu # Linux
 # install paddlepaddle
 python -m pip install paddlepaddle==3.0.0b2 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 # install paddlex
 python -m pip install https://paddle-model-ecology.bj.bcebos.com/paddlex/whl/paddlex-3.0.0b2-py3-none-any.whl
-# install surya-ocr
-python -m pip install surya-ocr
 # install tabled-pdf
-python -m pip install tabled-pdf
+python -m pip install tabled-pdf==0.1.4
 # install openai for postprocessing (optional)
 python -m pip install openai
-# override opencv version
-python -m pip install opencv-python==4.5.5.64
 ```
 
-The previous step-by-step installation still fails. The only one that seems to work right now is Linux using --no-deps installation from requirements.txt,
-which also includes some nvidia dependencies which again should not be needed for running on CPU but it seems they come with some libraries that fix
-the C++ segfault. Still, these same nvidia dependencies seem to be the ones failing on Windows installation.
+The previous step-by-step installation seems to work on Windows and fail on Linux. For Linux, the only one that seems to work right now is using --no-deps installation from requirements.txt, which also includes some nvidia dependencies which again should not be needed for running on CPU but it seems they come with some libraries that fix the C++ segfault.
 
 
 To use the program, you can run `python main.py --help` from src/image-to-xlsx to see the help for all options:
