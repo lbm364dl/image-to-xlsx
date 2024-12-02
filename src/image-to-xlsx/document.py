@@ -1,4 +1,5 @@
 import shutil
+import pymupdf
 from surya.input.load import load_from_file
 from surya.settings import settings
 from pathlib import Path
@@ -6,9 +7,17 @@ from openpyxl import Workbook
 
 
 class Document:
-    def __init__(self, input_path, results_dir):
-        self.pages, _, _ = load_from_file(input_path, dpi=settings.IMAGE_DPI_HIGHRES)
+    def __init__(self, input_path, results_dir, use_pdf_text=False):
+        self.use_pdf_text = use_pdf_text
         self.path = Path(input_path)
+
+        if use_pdf_text:
+            self.pages = list(pymupdf.open(self.path).pages())
+        else:
+            self.pages, _, _ = load_from_file(
+                input_path, dpi=settings.IMAGE_DPI_HIGHRES
+            )
+
         self.file_name = self.path.stem
         self.extension = self.path.suffix
         self.document_results_dir = results_dir / self.file_name

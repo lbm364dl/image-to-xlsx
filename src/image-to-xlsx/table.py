@@ -13,6 +13,7 @@ class Table:
     def __init__(
         self,
         whole_image,
+        page,
         table_bbox,
         model=None,
         processor=None,
@@ -20,14 +21,16 @@ class Table:
         det_processor=None,
         ocr_pipeline=None,
     ):
-        self.image = whole_image
-        self.cropped_img = self.image.crop(table_bbox)
-        self.table_bbox = table_bbox
-        self.model = model or pretrained.model
-        self.processor = processor or pretrained.processor
-        self.det_model = det_model or pretrained.det_model
-        self.det_processor = det_processor or pretrained.det_processor
-        self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
+        if not page.document.use_pdf_text:
+            self.page = page
+            self.image = whole_image
+            self.cropped_img = self.image.crop(table_bbox)
+            self.table_bbox = table_bbox
+            self.model = model or pretrained.model
+            self.processor = processor or pretrained.processor
+            self.det_model = det_model or pretrained.det_model
+            self.det_processor = det_processor or pretrained.det_processor
+            self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
 
     def recognize_structure(self, heuristic_thresh=0.6):
         [det_result] = batch_text_detection(
@@ -118,6 +121,7 @@ class Table:
 
     def nlp_postprocess(self, text_language="en"):
         from postprocessing import nlp_clean
+
         self.table_output = nlp_clean(self.table_output, text_language)
 
     def save_as_csv(self, output_path):

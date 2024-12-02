@@ -25,6 +25,8 @@ def nlp_clean(table, lang="en"):
             Can you try to fix this structured data? Some information:
             - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
             - If you find Chinese characters, remove them
+            - The second column should always be the measure unit. If it is a numeric cell, just shift the whole
+            row to include an empty cell in the second column.
             - Do not add any new separators
             - Remove column with number indexes if there is one
             - Only reply back with the corrected text

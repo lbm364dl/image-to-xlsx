@@ -29,6 +29,13 @@ def parse_args():
         default=0,
     )
     parser.add_argument(
+        "--unskew",
+        type=int,
+        choices={0, 1},
+        help="Try to detect and undo image rotation (0 for no, 1 for yes). Default 0",
+        default=0,
+    )
+    parser.add_argument(
         "--nlp-postprocess",
         type=int,
         choices={0, 1},
@@ -44,7 +51,15 @@ def parse_args():
     parser.add_argument(
         "--show-detected-boxes",
         type=int,
+        choices={0, 1},
         help="Open image with detected boxes for each table for debugging (0 for no, 1 for yes). Default 0",
+        default=0,
+    )
+    parser.add_argument(
+        "--use-pdf-text",
+        type=int,
+        choices={0, 1},
+        help="Use PyMuPDF to recognize the table (using internal PDF text), if you know the PDF comes with text (0 for no, 1 for yes). Default 0",
         default=0,
     )
 
