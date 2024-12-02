@@ -19,7 +19,7 @@ if __name__ == "__main__":
     first_page = args.first_page - 1
     last_page = args.last_page - 1
     for i, img in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
-        p = Page(img, i, d.document_results_dir, **pretrained.all_models())
+        p = Page(img, i, d, **pretrained.all_models())
         p.rotate(delta=0.1, limit=5)
 
         if args.binarize:
@@ -32,4 +32,7 @@ if __name__ == "__main__":
             compute_prefix=10**9,
             nlp_postprocess=args.nlp_postprocess,
             text_language=args.text_language,
+            show_detected_boxes=args.show_detected_boxes,
         )
+
+    d.save_output()

@@ -41,5 +41,11 @@ def parse_args():
         help="ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'",
         default="en",
     )
+    parser.add_argument(
+        "--show-detected-boxes",
+        type=int,
+        help="Open image with detected boxes for each table for debugging (0 for no, 1 for yes). Default 0",
+        default=0,
+    )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

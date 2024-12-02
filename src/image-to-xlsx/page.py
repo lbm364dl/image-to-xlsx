@@ -13,7 +13,7 @@ class Page:
         self,
         image,
         page_num,
-        document_results_dir,
+        document,
         model=None,
         processor=None,
         det_model=None,
@@ -24,7 +24,7 @@ class Page:
     ):
         self.image = image
         self.page_num = page_num
-        self.document_results_dir = document_results_dir
+        self.document = document
         self.model = model or pretrained.model()
         self.processor = processor or pretrained.processor()
         self.det_model = det_model or pretrained.det_model()
@@ -61,6 +61,7 @@ class Page:
         show_cropped_bboxes=False,
         nlp_postprocess=False,
         text_language="en",
+        show_detected_boxes=False,
     ):
         tables = self.detect_tables()
 
@@ -76,11 +77,15 @@ class Page:
             )
             t.recognize_structure(heuristic_thresh)
             t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
-            t.visualize_table_bboxes()
+
+            if show_detected_boxes:
+                t.visualize_table_bboxes()
 
             if nlp_postprocess:
                 t.nlp_postprocess(text_language)
 
-            t.save_as_csv(
-                self.document_results_dir / f"page_{self.page_num}_table_{i + 1}.csv"
+            sheet = self.document.workbook.create_sheet(
+                f"page_{self.page_num}_table_{i + 1}"
             )
+            for row in t.table_output:
+                sheet.append(row)
