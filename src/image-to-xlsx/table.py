@@ -84,12 +84,17 @@ class Table:
             row_ids, col_ids = cell.row_ids, cell.col_ids
             row_id, col_id = row_ids[0], col_ids[0]
             add_text = " ".join(pred["rec_text"])
-            if self.is_numeric_cell(add_text):
-                add_text = add_text.replace(".", "").replace(",", "")
+            add_text = self.maybe_clean_numeric_cell(add_text)
             if add_text:
                 table_output[row_id][col_id].append(add_text)
 
         return table_output
+
+    def maybe_clean_numeric_cell(self, text):
+        if self.is_numeric_cell(text):
+            return text.replace(".", "").replace(",", "")
+        else:
+            return text
 
     def extend_rows(self, table_output):
         split_table = []

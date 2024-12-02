@@ -85,7 +85,9 @@ class Page:
                 table_output = table.extract()
                 for i, row in enumerate(table_output):
                     for j, col in enumerate(row):
-                        table_output[i][j] = ILLEGAL_CHARACTERS_RE.sub(r"", col)
+                        table_output[i][j] = t.maybe_clean_numeric_cell(
+                            ILLEGAL_CHARACTERS_RE.sub(r"", col)
+                        )
                 t.table_output = table_output
             else:
                 t.recognize_structure(heuristic_thresh)
