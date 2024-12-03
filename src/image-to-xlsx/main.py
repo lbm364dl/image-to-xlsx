@@ -19,7 +19,11 @@ if __name__ == "__main__":
     first_page = args.first_page - 1
     last_page = args.last_page - 1
     for i, page in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
-        p = Page(page, i, d, **pretrained.all_models())
+        p = Page(page, i, d)
+
+        if not args.use_pdf_text:
+            p.set_models(**pretrained.all_models())
+
         p.process_page(
             unskew=args.unskew,
             binarize=args.binarize,

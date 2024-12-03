@@ -12,9 +12,23 @@ from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 class Page:
     def __init__(
         self,
-        image,
+        page,
         page_num,
         document,
+    ):
+        self.page = page
+        self.page_num = page_num
+        self.document = document
+        self.model = None
+        self.processor = None
+        self.det_model = None
+        self.det_processor = None
+        self.layout_model = None
+        self.layout_processor = None
+        self.ocr_pipeline = None
+
+    def set_models(
+        self,
         model=None,
         processor=None,
         det_model=None,
@@ -23,9 +37,6 @@ class Page:
         layout_processor=None,
         ocr_pipeline=None,
     ):
-        self.image = image
-        self.page_num = page_num
-        self.document = document
         self.model = model or pretrained.model()
         self.processor = processor or pretrained.processor()
         self.det_model = det_model or pretrained.det_model()
@@ -35,21 +46,21 @@ class Page:
         self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline()
 
     def rotate(self, delta=0.05, limit=5, custom_angle=None):
-        _, corrected = correct_skew(np.array(self.image), delta, limit, custom_angle)
-        self.image = Image.fromarray(corrected)
+        _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
+        self.page = Image.fromarray(corrected)
 
     def binarize(self, method="otsu", block_size=None, constant=None):
-        self.image = binarize(self.image, method, block_size, constant)
+        self.page = binarize(self.page, method, block_size, constant)
 
     def detect_tables(self):
         if self.document.use_pdf_text:
-            return self.image.find_tables(strategy="text").tables
+            return self.page.find_tables(strategy="text").tables
         else:
             [line_prediction] = batch_text_detection(
-                [self.image], self.det_model, self.det_processor
+                [self.page], self.det_model, self.det_processor
             )
             [layout_prediction] = batch_layout_detection(
-                [self.image],
+                [self.page],
                 self.layout_model,
                 self.layout_processor,
                 [line_prediction],
@@ -72,7 +83,7 @@ class Page:
         for i, table in enumerate(tables):
             table_output = None
             t = Table(
-                self.image,
+                self.page,
                 self,
                 table.bbox,
                 self.model,
@@ -120,14 +131,14 @@ class Page:
                 show_detected_boxes=show_detected_boxes,
             )
         else:
-            self.image.show()
+            self.page.show()
             if unskew:
                 self.rotate(delta=0.05, limit=5)
-            self.image.show()
+            self.page.show()
 
             if binarize:
                 self.binarize(method="otsu", block_size=31, constant=10)
-                self.image.show()
+                self.page.show()
 
             self.recognize_tables_structure(
                 heuristic_thresh=0.6,
