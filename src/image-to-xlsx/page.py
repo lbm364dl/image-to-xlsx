@@ -72,7 +72,7 @@ class Page:
         self,
         heuristic_thresh=0.6,
         img_pad=100,
-        compute_prefix=50,
+        compute_prefix=10**9,
         show_cropped_bboxes=False,
         nlp_postprocess=False,
         text_language="en",
@@ -143,7 +143,7 @@ class Page:
             self.recognize_tables_structure(
                 heuristic_thresh=0.6,
                 img_pad=100,
-                compute_prefix=50,
+                compute_prefix=10**9,
                 nlp_postprocess=nlp_postprocess,
                 text_language=text_language,
                 show_detected_boxes=show_detected_boxes,
