@@ -1,5 +1,6 @@
 import os
 from cli import parse_args
+from utils import get_document_paths
 from pathlib import Path
 
 
@@ -14,22 +15,25 @@ if __name__ == "__main__":
     results_dir = input_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    d = Document(args.input_path, results_dir, args.use_pdf_text)
+    for path in get_document_paths(input_dir, args.input_path):
+        print(f"Processing document {path}")
 
-    first_page = args.first_page - 1
-    last_page = args.last_page - 1
-    for i, page in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
-        p = Page(page, i, d)
+        d = Document(path, results_dir, args.use_pdf_text)
 
-        if not args.use_pdf_text:
-            p.set_models(**pretrained.all_models())
+        first_page = args.first_page - 1
+        last_page = args.last_page - 1
+        for i, page in enumerate(d.pages[first_page : last_page + 1], first_page + 1):
+            p = Page(page, i, d)
 
-        p.process_page(
-            unskew=args.unskew,
-            binarize=args.binarize,
-            nlp_postprocess=args.nlp_postprocess,
-            text_language=args.text_language,
-            show_detected_boxes=args.show_detected_boxes,
-        )
+            if not args.use_pdf_text:
+                p.set_models(**pretrained.all_models())
 
-    d.save_output()
+            p.process_page(
+                unskew=args.unskew,
+                binarize=args.binarize,
+                nlp_postprocess=args.nlp_postprocess,
+                text_language=args.text_language,
+                show_detected_boxes=args.show_detected_boxes,
+            )
+
+        d.save_output()
