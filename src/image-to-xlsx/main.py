@@ -15,7 +15,7 @@ if __name__ == "__main__":
     results_dir = input_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    for path in get_document_paths(input_dir, args.input_path):
+    for path in get_document_paths(args.input_path):
         print(f"Processing document {path}")
 
         d = Document(path, results_dir, args.use_pdf_text)
