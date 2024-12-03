@@ -7,6 +7,7 @@ from PIL import Image
 from surya.detection import batch_text_detection
 from surya.tables import batch_table_recognition
 from tabled.assignment import assign_rows_columns
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 
 class Table:
@@ -89,6 +90,14 @@ class Table:
                 table_output[row_id][col_id].append(add_text)
 
         return table_output
+
+    def set_table_from_pdf_text(self, table):
+        self.table_output = table.extract()
+        for i, row in enumerate(self.table_output):
+            for j, col in enumerate(row):
+                self.table_output[i][j] = self.maybe_clean_numeric_cell(
+                    ILLEGAL_CHARACTERS_RE.sub(r"", col)
+                )
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
