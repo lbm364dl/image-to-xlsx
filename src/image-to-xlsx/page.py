@@ -13,10 +13,12 @@ class Page:
         self,
         page,
         page_num,
+        text_lines,
         document,
     ):
         self.page = page
         self.page_num = page_num
+        self.text_lines = text_lines
         self.document = document
         self.model = None
         self.processor = None
@@ -82,6 +84,7 @@ class Page:
         for i, table in enumerate(tables):
             t = Table(
                 self.page,
+                self.text_lines,
                 self,
                 table.bbox,
                 self.model,
@@ -94,10 +97,11 @@ class Page:
                 t.set_table_from_pdf_text(table)
             else:
                 t.recognize_structure(heuristic_thresh)
-                t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
 
                 if show_detected_boxes:
                     t.visualize_table_bboxes()
+
+                t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
 
             if nlp_postprocess:
                 t.nlp_postprocess(text_language)
