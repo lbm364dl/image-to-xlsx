@@ -23,10 +23,12 @@ def nlp_clean(table, lang="en"):
                 "role": "user",
                 "content": f"""
             Can you try to fix this structured data? Some information:
+            - Do not change anything from the structure of the data, keep each cell as it is. You should only
+            ever change the content of each cell.
             - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
+            - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I
+            is probably a 1, an O is probably a 0, a G is probably a 6, etc...
             - If you find Chinese characters, remove them
-            - The second column should always be the measure unit. If it is a numeric cell, just shift the whole
-            row to include an empty cell in the second column.
             - Do not add any new separators
             - Remove column with number indexes if there is one
             - Only reply back with the corrected text

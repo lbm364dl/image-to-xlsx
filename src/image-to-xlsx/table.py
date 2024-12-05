@@ -36,9 +36,16 @@ class Table:
             self.det_processor = det_processor or pretrained.det_processor
             self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
 
+    def reject_large_bboxes(self, bboxes, thresh=30):
+        return [tb for tb in bboxes if tb.bbox[3] - tb.bbox[1] <= thresh]
+
     def recognize_structure(self, heuristic_thresh=0.6):
         if self.text_lines:
-            [table_blocks] = get_table_blocks([self.table_bbox], self.text_lines, self.image.size) if self.text_lines is not None else []
+            [table_blocks] = (
+                get_table_blocks([self.table_bbox], self.text_lines, self.image.size)
+                if self.text_lines is not None
+                else []
+            )
         else:
             table_blocks = []
 
@@ -46,6 +53,7 @@ class Table:
             [self.cropped_img], self.det_model, self.det_processor
         )
         self.det_result = det_result
+        det_result.bboxes = self.reject_large_bboxes(det_result.bboxes)
 
         if table_blocks:
             cell_bboxes = table_blocks
@@ -62,17 +70,9 @@ class Table:
             [self.cropped_img], [cell_bboxes], self.model, self.processor
         )
 
-        # print(table_pred.rows)
-        # my_bboxes = [list(map(int, row.bbox)) for row in table_pred.rows]
-        # print(my_bboxes)
-        # self.visualize_bboxes(self.cropped_img, my_bboxes)
-        # print('det_result', det_result)
-        # self.visualize_bboxes(self.cropped_img, [col.bbox for col in det_result.vertical_lines])
-
         self.table["cells"] = assign_rows_columns(
-            table_pred, self.table["img"].size, heuristic_thresh
+            table_pred, self.table["img"].size, heuristic_thresh, self.cropped_img
         )
-        # print("table cells", self.table["cells"])
 
     def is_numeric_cell(self, text, threshold=0.6):
         numeric = sum("0" <= c <= "9" for c in text)
@@ -104,7 +104,9 @@ class Table:
                 row_ids, col_ids = cell.row_ids, cell.col_ids
                 row_id, col_id = row_ids[0], col_ids[0]
                 add_text = cell.text
-                add_text = self.maybe_clean_numeric_cell(ILLEGAL_CHARACTERS_RE.sub(r"", add_text))
+                add_text = self.maybe_clean_numeric_cell(
+                    ILLEGAL_CHARACTERS_RE.sub(r"", add_text)
+                )
                 if add_text:
                     table_output[row_id][col_id].append(add_text)
         else:
@@ -153,7 +155,9 @@ class Table:
 
     def remove_low_content_rows(self, table_output):
         total_row_lengths = sum(len("".join(row)) for row in table_output)
-        mean_row_length = total_row_lengths / len(table_output) if len(table_output) > 0 else 0
+        mean_row_length = (
+            total_row_lengths / len(table_output) if len(table_output) > 0 else 0
+        )
         return [
             row for row in table_output if len("".join(row)) / mean_row_length > 0.1
         ]
@@ -162,9 +166,6 @@ class Table:
         table_output = self.recognize_texts(
             img_pad, compute_prefix, show_cropped_bboxes
         )
-        # print('table_output')
-        # for row in table_output:
-        #     print(row)
         table_output = self.extend_rows(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 

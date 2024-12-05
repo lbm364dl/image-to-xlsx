@@ -23,7 +23,9 @@ if __name__ == "__main__":
         first_page = args.first_page - 1
         last_page = args.last_page - 1
         l = list(zip(d.pages, d.text_lines))
-        for i, (page, text_lines) in enumerate(l[first_page : last_page + 1], first_page + 1):
+        for i, (page, text_lines) in enumerate(
+            l[first_page : last_page + 1], first_page + 1
+        ):
             p = Page(page, i, text_lines, d)
 
             if not args.use_pdf_text:

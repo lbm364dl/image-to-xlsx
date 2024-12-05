@@ -13,11 +13,14 @@ class Document:
 
         if use_pdf_text:
             self.pages = list(pymupdf.open(self.path).pages())
+            self.text_lines = [None] * len(self.pages)
         else:
             self.pages, _, self.text_lines = load_from_file(
                 input_path, dpi=settings.IMAGE_DPI_HIGHRES, load_text_lines=True
             )
-            self.text_lines = [(line if line["blocks"] else None) for line in self.text_lines]
+            self.text_lines = [
+                (line if line and line["blocks"] else None) for line in self.text_lines
+            ]
 
         self.file_name = self.path.stem
         self.extension = self.path.suffix
