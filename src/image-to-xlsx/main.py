@@ -18,7 +18,7 @@ if __name__ == "__main__":
     for path in get_document_paths(args.input_path):
         print(f"Processing document {path}")
 
-        d = Document(path, results_dir, args.use_pdf_text)
+        d = Document(path, results_dir, args.use_pdf_text, args.fixed_decimal_places)
 
         first_page = args.first_page - 1
         last_page = args.last_page - 1

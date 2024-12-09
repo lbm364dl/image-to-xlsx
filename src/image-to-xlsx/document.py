@@ -7,7 +7,7 @@ from openpyxl import Workbook
 
 
 class Document:
-    def __init__(self, input_path, results_dir, use_pdf_text=False):
+    def __init__(self, input_path, results_dir, use_pdf_text=False, fixed_decimal_places=0):
         self.use_pdf_text = use_pdf_text
         self.path = Path(input_path)
 
@@ -22,6 +22,7 @@ class Document:
                 (line if line and line["blocks"] else None) for line in self.text_lines
             ]
 
+        self.fixed_decimal_places = fixed_decimal_places
         self.file_name = self.path.stem
         self.extension = self.path.suffix
         self.document_results_dir = results_dir / self.file_name

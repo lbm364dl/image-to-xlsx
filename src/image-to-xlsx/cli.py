@@ -62,5 +62,11 @@ def parse_args():
         help="Use PyMuPDF to recognize the table (using internal PDF text), if you know the PDF comes with text (0 for no, 1 for yes). Default 0",
         default=0,
     )
+    parser.add_argument(
+        "--fixed-decimal-places",
+        type=int,
+        help="Forcefully write a decimal point this number of places to the left of the last digit. By default no decimal points are added.",
+        default=0,
+    )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

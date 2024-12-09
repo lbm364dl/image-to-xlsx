@@ -135,7 +135,11 @@ class Table:
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
-            return text.replace(".", "").replace(",", "")
+            text = text.replace(".", "").replace(",", "")
+            fixed_decimal_places = self.page.document.fixed_decimal_places
+            if text and fixed_decimal_places > 0:
+                text = text[:-fixed_decimal_places] + "." + text[-fixed_decimal_places:]
+            return text
         else:
             return text
 
