@@ -41,6 +41,7 @@ if __name__ == "__main__":
                 unskew=args.unskew,
                 binarize=args.binarize,
                 nlp_postprocess=args.nlp_postprocess,
+                nlp_postprocess_prompt_file=args.nlp_postprocess_prompt_file,
                 text_language=args.text_language,
                 show_detected_boxes=args.show_detected_boxes,
                 compute_prefix=args.compute_prefix,

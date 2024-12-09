@@ -183,10 +183,12 @@ class Table:
             table_output = self.join_cells_content(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 
-    def nlp_postprocess(self, text_language="en"):
+    def nlp_postprocess(self, text_language="en", nlp_postprocess_prompt_file=None):
         from postprocessing import nlp_clean
 
-        self.table_output = nlp_clean(self.table_output, text_language)
+        self.table_output = nlp_clean(
+            self.table_output, text_language, nlp_postprocess_prompt_file
+        )
 
     def save_as_csv(self, output_path):
         with open(output_path, "w", encoding="utf-8") as f_out:

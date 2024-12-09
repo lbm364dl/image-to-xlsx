@@ -76,6 +76,7 @@ class Page:
         compute_prefix=10**9,
         show_cropped_bboxes=False,
         nlp_postprocess=False,
+        nlp_postprocess_prompt_file=None,
         text_language="en",
         show_detected_boxes=False,
     ):
@@ -104,7 +105,7 @@ class Page:
                 t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
 
             if nlp_postprocess:
-                t.nlp_postprocess(text_language)
+                t.nlp_postprocess(text_language, nlp_postprocess_prompt_file)
 
             sheet = self.document.workbook.create_sheet(
                 f"page_{self.page_num}_table_{i + 1}"
@@ -117,6 +118,7 @@ class Page:
         unskew=False,
         binarize=False,
         nlp_postprocess=False,
+        nlp_postprocess_prompt_file=None,
         text_language="en",
         show_detected_boxes=False,
         compute_prefix=10**9,
@@ -140,6 +142,7 @@ class Page:
                 img_pad=image_pad,
                 compute_prefix=compute_prefix,
                 nlp_postprocess=nlp_postprocess,
+                nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
                 text_language=text_language,
                 show_detected_boxes=show_detected_boxes,
             )

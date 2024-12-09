@@ -13,8 +13,25 @@ lang_name = {
 }
 
 
-def nlp_clean(table, lang="en"):
+def nlp_clean(table, lang="en", nlp_postprocess_prompt_file=None):
     client = OpenAI(api_key=TOKEN)
+
+    if nlp_postprocess_prompt_file:
+        with open(nlp_postprocess_prompt_file, "r") as f:
+            prompt = f.read()
+    else:
+        prompt = f"""
+        Can you try to fix this structured data? Some information:
+        - Do not change anything from the structure of the data, keep each cell as it is. You should only
+        ever change the content of each cell.
+        - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
+        - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I
+        is probably a 1, an O is probably a 0, a G is probably a 6, etc...
+        - If you find Chinese characters, remove them
+        - Do not add any new separators
+        - Remove column with number indexes if there is one
+        - Only reply back with the corrected text
+        """
 
     output = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -22,16 +39,7 @@ def nlp_clean(table, lang="en"):
             {
                 "role": "user",
                 "content": f"""
-            Can you try to fix this structured data? Some information:
-            - Do not change anything from the structure of the data, keep each cell as it is. You should only
-            ever change the content of each cell.
-            - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
-            - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I
-            is probably a 1, an O is probably a 0, a G is probably a 6, etc...
-            - If you find Chinese characters, remove them
-            - Do not add any new separators
-            - Remove column with number indexes if there is one
-            - Only reply back with the corrected text
+            {prompt}
             {table_to_csv(table)}
             """,
             }

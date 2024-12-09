@@ -43,6 +43,12 @@ def parse_args():
         default=0,
     )
     parser.add_argument(
+        "--nlp-postprocess-prompt-file",
+        type=str,
+        help="Use a custom prompt message for NLP postprocessing. Indicate the path of the text file with the prompt message. By default, a generic one for cleaning cell typos is used.",
+        default=None,
+    )
+    parser.add_argument(
         "--text-language",
         type=str,
         help="ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'",
