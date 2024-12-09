@@ -138,7 +138,7 @@ class Page:
                 self.binarize(method="otsu", block_size=31, constant=10)
 
             self.recognize_tables_structure(
-                heuristic_thresh=0.6,
+                heuristic_thresh=0.8,
                 img_pad=image_pad,
                 compute_prefix=compute_prefix,
                 nlp_postprocess=nlp_postprocess,
