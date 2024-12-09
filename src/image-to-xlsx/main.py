@@ -18,7 +18,13 @@ if __name__ == "__main__":
     for path in get_document_paths(args.input_path):
         print(f"Processing document {path}")
 
-        d = Document(path, results_dir, args.use_pdf_text, args.fixed_decimal_places)
+        d = Document(
+            path,
+            results_dir,
+            args.use_pdf_text,
+            args.fixed_decimal_places,
+            args.extend_rows,
+        )
 
         first_page = args.first_page - 1
         last_page = args.last_page - 1
@@ -37,6 +43,8 @@ if __name__ == "__main__":
                 nlp_postprocess=args.nlp_postprocess,
                 text_language=args.text_language,
                 show_detected_boxes=args.show_detected_boxes,
+                compute_prefix=args.compute_prefix,
+                image_pad=args.image_pad,
             )
 
         d.save_output()

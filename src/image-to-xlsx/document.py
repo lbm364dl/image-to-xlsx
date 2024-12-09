@@ -7,7 +7,14 @@ from openpyxl import Workbook
 
 
 class Document:
-    def __init__(self, input_path, results_dir, use_pdf_text=False, fixed_decimal_places=0):
+    def __init__(
+        self,
+        input_path,
+        results_dir,
+        use_pdf_text=0,
+        fixed_decimal_places=0,
+        extend_rows=0,
+    ):
         self.use_pdf_text = use_pdf_text
         self.path = Path(input_path)
 
@@ -23,6 +30,7 @@ class Document:
             ]
 
         self.fixed_decimal_places = fixed_decimal_places
+        self.extend_rows = extend_rows
         self.file_name = self.path.stem
         self.extension = self.path.suffix
         self.document_results_dir = results_dir / self.file_name

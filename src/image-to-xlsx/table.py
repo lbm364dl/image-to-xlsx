@@ -157,6 +157,13 @@ class Table:
 
         return split_table
 
+    def join_cells_content(self, table_output):
+        for i, row in enumerate(table_output):
+            for j, col in enumerate(row):
+                table_output[i][j] = " ".join(col)
+
+        return table_output
+
     def remove_low_content_rows(self, table_output):
         total_row_lengths = sum(len("".join(row)) for row in table_output)
         mean_row_length = (
@@ -170,7 +177,10 @@ class Table:
         table_output = self.recognize_texts(
             img_pad, compute_prefix, show_cropped_bboxes
         )
-        table_output = self.extend_rows(table_output)
+        if self.page.document.extend_rows:
+            table_output = self.extend_rows(table_output)
+        else:
+            table_output = self.join_cells_content(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 
     def nlp_postprocess(self, text_language="en"):

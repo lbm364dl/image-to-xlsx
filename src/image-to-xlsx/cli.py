@@ -63,6 +63,25 @@ def parse_args():
         default=0,
     )
     parser.add_argument(
+        "--extend-rows",
+        type=int,
+        choices={0, 1},
+        help="If there is a row that tries to include several texts into the same cell, try to extend to a new row below (0 for no, 1 for yes). Default 0, meaning all texts to the same cell are just joined with a space separator",
+        default=0,
+    )
+    parser.add_argument(
+        "--image-pad",
+        type=int,
+        help="When running OCR for each individual cell, add this amount of pixels in padding on the cropped image on all four sides. More or less padding may help for better OCR text recognition. Default 100 pixels",
+        default=100,
+    )
+    parser.add_argument(
+        "--compute-prefix",
+        type=int,
+        help="For debugging, compute only this amount of cells in the output table, since it can take too long to compute all of them. Default all cells",
+        default=INF,
+    )
+    parser.add_argument(
         "--fixed-decimal-places",
         type=int,
         help="Forcefully write a decimal point this number of places to the left of the last digit. By default no decimal points are added.",

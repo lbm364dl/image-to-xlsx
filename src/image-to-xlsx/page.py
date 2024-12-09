@@ -119,6 +119,8 @@ class Page:
         nlp_postprocess=False,
         text_language="en",
         show_detected_boxes=False,
+        compute_prefix=10**9,
+        image_pad=100,
     ):
         if self.document.use_pdf_text:
             self.recognize_tables_structure(
@@ -135,8 +137,8 @@ class Page:
 
             self.recognize_tables_structure(
                 heuristic_thresh=0.6,
-                img_pad=100,
-                compute_prefix=10**9,
+                img_pad=image_pad,
+                compute_prefix=compute_prefix,
                 nlp_postprocess=nlp_postprocess,
                 text_language=text_language,
                 show_detected_boxes=show_detected_boxes,
