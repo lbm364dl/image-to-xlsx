@@ -35,8 +35,8 @@ python -m pip install openai
 To use the program, you can run `python main.py --help` from `src/image-to-xlsx` to see the help for all options:
 
 ```
-usage: main.py [-h] [--first-page FIRST_PAGE] [--last-page LAST_PAGE] [--binarize {0,1}] [--unskew {0,1}] [--nlp-postprocess {0,1}] [--text-language TEXT_LANGUAGE] [--show-detected-boxes {0,1}] [--use-pdf-text {0,1}] [--extend-rows {0,1}]
-               [--image-pad IMAGE_PAD] [--compute-prefix COMPUTE_PREFIX] [--fixed-decimal-places FIXED_DECIMAL_PLACES]
+usage: main.py [-h] [--first-page FIRST_PAGE] [--last-page LAST_PAGE] [--binarize {0,1}] [--unskew {0,1}] [--nlp-postprocess {0,1}] [--nlp-postprocess-prompt-file NLP_POSTPROCESS_PROMPT_FILE] [--text-language TEXT_LANGUAGE]
+               [--show-detected-boxes {0,1}] [--use-pdf-text {0,1}] [--extend-rows {0,1}] [--image-pad IMAGE_PAD] [--compute-prefix COMPUTE_PREFIX] [--fixed-decimal-places FIXED_DECIMAL_PLACES]
                input_path
 
 Convert tables from image/pdf to xlsx.
@@ -54,6 +54,8 @@ options:
   --unskew {0,1}        Try to detect and undo image rotation (0 for no, 1 for yes). Default 0
   --nlp-postprocess {0,1}
                         Use non-free OpenAI to try to fix OCR misspellings (0 for no, 1 for yes). Default 0
+  --nlp-postprocess-prompt-file NLP_POSTPROCESS_PROMPT_FILE
+                        Use a custom prompt message for NLP postprocessing. Indicate the path of the text file with the prompt message. By default, a generic one for cleaning cell typos is used.
   --text-language TEXT_LANGUAGE
                         ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'
   --show-detected-boxes {0,1}
