@@ -24,8 +24,9 @@ class Table:
         det_processor=None,
         ocr_pipeline=None,
     ):
+        self.page = page
+
         if not page.document.use_pdf_text:
-            self.page = page
             self.text_lines = text_lines
             self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
