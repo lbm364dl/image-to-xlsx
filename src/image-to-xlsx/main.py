@@ -11,17 +11,13 @@ if __name__ == "__main__":
     from document import Document
     from page import Page
 
-    input_dir = Path(os.path.dirname(args.input_path))
-    results_dir = input_dir / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-
-    for relative_path in get_document_paths(args.input_path):
+    root_dir_path, relative_paths = get_document_paths(args.input_path)
+    for relative_path in relative_paths:
         print(f"Processing document {relative_path}")
 
         d = Document(
             relative_path,
-            input_dir,
-            results_dir,
+            root_dir_path,
             args.use_pdf_text,
             args.fixed_decimal_places,
             args.extend_rows,

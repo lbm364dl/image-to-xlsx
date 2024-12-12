@@ -11,14 +11,13 @@ class Document:
     def __init__(
         self,
         relative_path,
-        input_dir,
-        results_dir,
+        root_dir_path,
         use_pdf_text=0,
         fixed_decimal_places=0,
         extend_rows=0,
     ):
         self.use_pdf_text = use_pdf_text
-        real_path = os.path.join(input_dir, relative_path)
+        real_path = os.path.join(root_dir_path, relative_path)
         self.path = Path(real_path)
 
         if use_pdf_text:
@@ -36,11 +35,15 @@ class Document:
         self.extend_rows = extend_rows
         self.file_name = self.path.stem
         self.extension = self.path.suffix
-        self.document_results_dir = results_dir / self.file_name
-        self.document_results_dir.mkdir(parents=True, exist_ok=True)
+        self.root_dir_path = Path(root_dir_path)
+        self.relative_path = Path(relative_path)
         self.workbook = Workbook()
         self.workbook.remove(self.workbook.active)
 
     def save_output(self):
-        self.workbook.save(self.document_results_dir / f"{self.file_name}_output.xlsx")
-        shutil.copy(self.path, self.document_results_dir)
+        stem = self.relative_path.stem
+        output_dir = (self.root_dir_path / "results" / self.relative_path).parent / stem
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_xlsx_path = output_dir / f"{self.relative_path.stem}.xlsx"
+        self.workbook.save(output_xlsx_path)
+        shutil.copy(self.path, output_dir)
