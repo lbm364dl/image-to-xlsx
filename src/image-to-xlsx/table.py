@@ -72,7 +72,7 @@ class Table:
         )
 
         self.table["cells"] = assign_rows_columns(
-            table_pred, self.table["img"].size, heuristic_thresh, self.cropped_img
+            table_pred, self.table["img"].size, heuristic_thresh
         )
 
     def is_numeric_cell(self, text, threshold=0.6):
