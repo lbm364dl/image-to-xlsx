@@ -75,6 +75,9 @@ class Page:
         tables = get_page_tables_method[self.document.method](**kwargs)
 
         for i, table in enumerate(tables):
+            if kwargs.get("extend_rows"):
+                table.extend_rows()
+
             if kwargs.get("nlp_postprocess"):
                 table.nlp_postprocess(
                     kwargs.get("text_language"),

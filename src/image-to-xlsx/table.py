@@ -2,6 +2,7 @@ import os
 import numpy as np
 import cv2
 import pretrained
+from collections import defaultdict
 from definitions import OUTPUT_PATH
 from PIL import Image
 from surya.detection import batch_text_detection
@@ -127,12 +128,10 @@ class Table:
         return table_output
 
     def set_table_from_pdf_text(self, table):
-        self.table_output = table.extract()
-        for i, row in enumerate(self.table_output):
+        self.table_data = defaultdict(dict)
+        for i, row in enumerate(table.extract()):
             for j, col in enumerate(row):
-                self.table_output[i][j] = self.maybe_clean_numeric_cell(
-                    ILLEGAL_CHARACTERS_RE.sub(r"", col)
-                )
+                self.table_data[i - 1][j - 1] = [{"text": col, "confidence": None}]
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
@@ -144,19 +143,21 @@ class Table:
         else:
             return text
 
-    def extend_rows(self, table_output):
+    def extend_rows(self):
         split_table = []
-        for row in table_output:
+        for row in self.table_data:
             rows = []
             for j, col in enumerate(row):
                 for i, part in enumerate(col):
                     if len(rows) <= i:
-                        rows.append([""] * len(row))
-                    rows[i][j] = part
+                        rows.append([[] for _ in range(len(row))])
+                    rows[i][j].append(part)
+                    assert len(rows[i][j]) == 1
 
             split_table += rows
 
-        return split_table
+        self.table_data = split_table
+        print("self.table_data", self.table_data)
 
     def join_cells_content(self, table_output):
         for i, row in enumerate(table_output):
@@ -180,10 +181,7 @@ class Table:
         table_output = self.recognize_texts(
             image_pad, compute_prefix, show_cropped_bboxes
         )
-        if self.page.document.extend_rows:
-            table_output = self.extend_rows(table_output)
-        else:
-            table_output = self.join_cells_content(table_output)
+        table_output = self.join_cells_content(table_output)
         self.table_output = self.remove_low_content_rows(table_output)
 
     def nlp_postprocess(self, text_language="en", nlp_postprocess_prompt_file=None):

@@ -35,3 +35,13 @@ def test_with_nlp_postprocess():
     assert os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.pdf")
     assert os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.xlsx")
     shutil.rmtree(output_dir)
+
+def test_extend_rows():
+    input_path = Path("inputs/StatisticalAbstract.1949.imports.pp2.pdf")
+    output_dir = Path("inputs/results/StatisticalAbstract.1949.imports.pp2")
+    assert not os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.pdf")
+    assert not os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.xlsx")
+    run(input_path, last_page=1, extend_rows=1)
+    assert os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.pdf")
+    assert os.path.isfile(output_dir / "StatisticalAbstract.1949.imports.pp2.xlsx")
+    shutil.rmtree(output_dir)
