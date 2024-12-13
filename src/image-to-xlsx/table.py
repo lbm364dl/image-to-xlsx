@@ -26,7 +26,7 @@ class Table:
     ):
         self.page = page
 
-        if not page.document.use_pdf_text:
+        if not page.document.method == "pdf-text":
             self.text_lines = text_lines
             self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
@@ -79,13 +79,13 @@ class Table:
         numeric = sum("0" <= c <= "9" for c in text)
         return numeric >= threshold * len(text)
 
-    def get_cropped_cell_images(self, img_pad, compute_prefix, show_cropped_bboxes):
+    def get_cropped_cell_images(self, image_pad, compute_prefix, show_cropped_bboxes):
         cropped_imgs = []
         for cell in self.table["cells"][:compute_prefix]:
             cropped_img = np.array(self.table["img"].crop(cell.bbox))
             cropped_img = np.pad(
                 cropped_img,
-                ((img_pad, img_pad), (img_pad, img_pad), (0, 0)),
+                ((image_pad, image_pad), (image_pad, image_pad), (0, 0)),
                 mode="constant",
                 constant_values=255,
             )
@@ -95,7 +95,7 @@ class Table:
 
         return cropped_imgs
 
-    def recognize_texts(self, img_pad, compute_prefix, show_cropped_bboxes):
+    def recognize_texts(self, image_pad, compute_prefix, show_cropped_bboxes):
         n = max((cell.row_ids[0] + 1 for cell in self.table["cells"]), default=0)
         m = max((cell.col_ids[0] + 1 for cell in self.table["cells"]), default=0)
         table_output = [[[] for _ in range(m)] for _ in range(n)]
@@ -112,7 +112,7 @@ class Table:
                     table_output[row_id][col_id].append(add_text)
         else:
             cropped_imgs = self.get_cropped_cell_images(
-                img_pad, compute_prefix, show_cropped_bboxes
+                image_pad, compute_prefix, show_cropped_bboxes
             )
             output = self.pipeline.predict(cropped_imgs)
 
@@ -174,9 +174,11 @@ class Table:
             row for row in table_output if len("".join(row)) / mean_row_length > 0.1
         ]
 
-    def build_table(self, img_pad=100, compute_prefix=10**9, show_cropped_bboxes=False):
+    def build_table(
+        self, image_pad=100, compute_prefix=10**9, show_cropped_bboxes=False
+    ):
         table_output = self.recognize_texts(
-            img_pad, compute_prefix, show_cropped_bboxes
+            image_pad, compute_prefix, show_cropped_bboxes
         )
         if self.page.document.extend_rows:
             table_output = self.extend_rows(table_output)

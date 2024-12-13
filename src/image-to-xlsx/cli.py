@@ -1,14 +1,27 @@
 import sys
 import argparse
+import textwrap
 
 INF = 10**9
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert tables from image/pdf to xlsx."
+        description="Convert tables from image/pdf to xlsx.",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("input_path", type=str, help="Path to PDF or image file.")
+    parser.add_argument(
+        "--method",
+        type=str,
+        choices={"surya+paddle", "pdf-text"},
+        help=textwrap.dedent("""\
+        Method to use for table recognition. Default surya+paddle. Methods:
+        - surya+paddle: opensource AI table recognition using surya library and OCR each cell using Paddle
+        - pdf-text: use PyMuPDF library to recognize the table (using internal PDF text), if you know the PDF comes with text
+        """),
+        default="surya+paddle",
+    )
     parser.add_argument(
         "--first-page",
         type=int,
@@ -59,13 +72,6 @@ def parse_args():
         type=int,
         choices={0, 1},
         help="Open image with detected boxes for each table for debugging (0 for no, 1 for yes). Default 0",
-        default=0,
-    )
-    parser.add_argument(
-        "--use-pdf-text",
-        type=int,
-        choices={0, 1},
-        help="Use PyMuPDF to recognize the table (using internal PDF text), if you know the PDF comes with text (0 for no, 1 for yes). Default 0",
         default=0,
     )
     parser.add_argument(

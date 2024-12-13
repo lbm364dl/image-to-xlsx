@@ -54,35 +54,50 @@ class Page:
         self.page = binarize(self.page, method, block_size, constant)
 
     def detect_tables(self):
-        if self.document.use_pdf_text:
-            return self.page.find_tables(strategy="text").tables
-        else:
-            [line_prediction] = batch_text_detection(
-                [self.page], self.det_model, self.det_processor
-            )
-            [layout_prediction] = batch_layout_detection(
-                [self.page],
-                self.layout_model,
-                self.layout_processor,
-                [line_prediction],
-            )
+        [line_prediction] = batch_text_detection(
+            [self.page], self.det_model, self.det_processor
+        )
+        [layout_prediction] = batch_layout_detection(
+            [self.page],
+            self.layout_model,
+            self.layout_processor,
+            [line_prediction],
+        )
 
-            return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
+        return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
 
-    def recognize_tables_structure(
-        self,
-        heuristic_thresh=0.6,
-        img_pad=100,
-        compute_prefix=10**9,
-        show_cropped_bboxes=False,
-        nlp_postprocess=False,
-        nlp_postprocess_prompt_file=None,
-        text_language="en",
-        show_detected_boxes=False,
-    ):
-        tables = self.detect_tables()
+    def process_page(self, **kwargs):
+        get_page_tables_method = {
+            "surya+paddle": self.get_page_tables_surya_plus_paddle,
+            "pdf-text": self.get_page_tables_with_pdf_text,
+        }
+
+        tables = get_page_tables_method[self.document.method](**kwargs)
 
         for i, table in enumerate(tables):
+            if kwargs.get("nlp_postprocess"):
+                table.nlp_postprocess(
+                    kwargs.get("text_language"),
+                    kwargs.get("nlp_postprocess_prompt_file"),
+                )
+
+            sheet = self.document.workbook.create_sheet(
+                f"page_{self.page_num}_table_{i + 1}"
+            )
+            for row in table.table_output:
+                sheet.append(row)
+
+    def get_page_tables_surya_plus_paddle(self, **kwargs):
+        self.set_models(**pretrained.all_models())
+
+        if kwargs.get("unskew"):
+            self.rotate(delta=0.05, limit=5)
+
+        if kwargs.get("binarize"):
+            self.binarize(method="otsu", block_size=31, constant=10)
+
+        tables = []
+        for table in self.detect_tables():
             t = Table(
                 self.page,
                 self.text_lines,
@@ -94,55 +109,30 @@ class Page:
                 self.det_processor,
                 self.ocr_pipeline,
             )
-            if self.document.use_pdf_text:
-                t.set_table_from_pdf_text(table)
-            else:
-                t.recognize_structure(heuristic_thresh)
+            t.recognize_structure(kwargs.get("heuristic_thresh"))
 
-                if show_detected_boxes:
-                    t.visualize_table_bboxes()
+            if kwargs.get("show_detected_boxes"):
+                t.visualize_table_bboxes()
 
-                t.build_table(img_pad, compute_prefix, show_cropped_bboxes)
-
-            if nlp_postprocess:
-                t.nlp_postprocess(text_language, nlp_postprocess_prompt_file)
-
-            sheet = self.document.workbook.create_sheet(
-                f"page_{self.page_num}_table_{i + 1}"
+            t.build_table(
+                image_pad=kwargs.get("image_pad"),
+                compute_prefix=kwargs.get("compute_prefix"),
+                show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
             )
-            for row in t.table_output:
-                sheet.append(row)
+            tables.append(t)
 
-    def process_page(
-        self,
-        unskew=False,
-        binarize=False,
-        nlp_postprocess=False,
-        nlp_postprocess_prompt_file=None,
-        text_language="en",
-        show_detected_boxes=False,
-        compute_prefix=10**9,
-        image_pad=100,
-    ):
-        if self.document.use_pdf_text:
-            self.recognize_tables_structure(
-                nlp_postprocess=nlp_postprocess,
-                text_language=text_language,
-                show_detected_boxes=show_detected_boxes,
+        return tables
+
+    def get_page_tables_with_pdf_text(self, **kwargs):
+        tables = []
+        for table in self.page.find_tables(strategy="text").tables:
+            t = Table(
+                self.page,
+                self.text_lines,
+                self,
+                table.bbox,
             )
-        else:
-            if unskew:
-                self.rotate(delta=0.05, limit=5)
+            t.set_table_from_pdf_text(table)
+            tables.append(t)
 
-            if binarize:
-                self.binarize(method="otsu", block_size=31, constant=10)
-
-            self.recognize_tables_structure(
-                heuristic_thresh=0.8,
-                img_pad=image_pad,
-                compute_prefix=compute_prefix,
-                nlp_postprocess=nlp_postprocess,
-                nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
-                text_language=text_language,
-                show_detected_boxes=show_detected_boxes,
-            )
+        return tables

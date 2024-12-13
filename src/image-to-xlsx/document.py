@@ -12,15 +12,15 @@ class Document:
         self,
         relative_path,
         root_dir_path,
-        use_pdf_text=0,
         fixed_decimal_places=0,
         extend_rows=0,
+        method="surya+paddle",
     ):
-        self.use_pdf_text = use_pdf_text
+        self.method = method
         real_path = os.path.join(root_dir_path, relative_path)
         self.path = Path(real_path)
 
-        if use_pdf_text:
+        if method == "pdf-text":
             self.pages = list(pymupdf.open(self.path).pages())
             self.text_lines = [None] * len(self.pages)
         else:
