@@ -78,17 +78,22 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            if kwargs.get("nlp_postprocess"):
-                table.nlp_postprocess(
-                    kwargs.get("text_language"),
-                    kwargs.get("nlp_postprocess_prompt_file"),
-                )
-
             sheet = self.document.workbook.create_sheet(
                 f"page_{self.page_num}_table_{i + 1}"
             )
-            for row in table.table_output:
-                sheet.append(row)
+            print("my_table_data", table.table_data)
+            table_matrix = table.as_clean_matrix()
+            print("my_table_matrix", table_matrix[:5])
+            if kwargs.get("nlp_postprocess"):
+                table_matrix = table.nlp_postprocess(
+                    table_matrix,
+                    kwargs.get("text_language"),
+                    kwargs.get("nlp_postprocess_prompt_file"),
+                )
+                print("my_table_matrix_after_nlp", table_matrix[:5])
+
+            for row in table_matrix:
+                sheet.append([cell["text"] for cell in row])
 
     def get_page_tables_surya_plus_paddle(self, **kwargs):
         self.set_models(**pretrained.all_models())
@@ -112,15 +117,13 @@ class Page:
                 self.det_processor,
                 self.ocr_pipeline,
             )
-            t.recognize_structure(kwargs.get("heuristic_thresh"))
 
-            if kwargs.get("show_detected_boxes"):
-                t.visualize_table_bboxes()
-
-            t.build_table(
+            t.set_table_from_surya_paddle(
                 image_pad=kwargs.get("image_pad"),
+                heuristic_thresh=kwargs.get("heuristic_thresh"),
                 compute_prefix=kwargs.get("compute_prefix"),
                 show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
+                show_detected_boxes=kwargs.get("show_detected_boxes"),
             )
             tables.append(t)
 

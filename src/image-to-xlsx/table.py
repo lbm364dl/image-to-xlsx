@@ -41,7 +41,7 @@ class Table:
     def reject_large_bboxes(self, bboxes, thresh=30):
         return [tb for tb in bboxes if tb.bbox[3] - tb.bbox[1] <= thresh]
 
-    def recognize_structure(self, heuristic_thresh=0.6):
+    def recognize_structure(self, heuristic_thresh=0.8):
         if self.text_lines:
             [table_blocks] = (
                 get_table_blocks([self.table_bbox], self.text_lines, self.image.size)
@@ -97,9 +97,7 @@ class Table:
         return cropped_imgs
 
     def recognize_texts(self, image_pad, compute_prefix, show_cropped_bboxes):
-        n = max((cell.row_ids[0] + 1 for cell in self.table["cells"]), default=0)
-        m = max((cell.col_ids[0] + 1 for cell in self.table["cells"]), default=0)
-        table_output = [[[] for _ in range(m)] for _ in range(n)]
+        self.table_data = defaultdict(lambda: defaultdict(list))
 
         if self.text_lines:
             for cell in self.table["cells"]:
@@ -110,7 +108,10 @@ class Table:
                     ILLEGAL_CHARACTERS_RE.sub(r"", add_text)
                 )
                 if add_text:
-                    table_output[row_id][col_id].append(add_text)
+                    self.table_data[row_id][col_id].append({
+                        "text": add_text,
+                        "confidence": None,
+                    })
         else:
             cropped_imgs = self.get_cropped_cell_images(
                 image_pad, compute_prefix, show_cropped_bboxes
@@ -123,15 +124,16 @@ class Table:
                 add_text = " ".join(pred["rec_text"])
                 add_text = self.maybe_clean_numeric_cell(add_text)
                 if add_text:
-                    table_output[row_id][col_id].append(add_text)
-
-        return table_output
+                    self.table_data[row_id][col_id].append({
+                        "text": add_text,
+                        "confidence": None,
+                    })
 
     def set_table_from_pdf_text(self, table):
         self.table_data = defaultdict(dict)
         for i, row in enumerate(table.extract()):
             for j, col in enumerate(row):
-                self.table_data[i - 1][j - 1] = [{"text": col, "confidence": None}]
+                self.table_data[i][j] = [{"text": col, "confidence": None}]
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
@@ -145,55 +147,96 @@ class Table:
 
     def extend_rows(self):
         split_table = []
-        for row in self.table_data:
+        for row in self.table_data.values():
             rows = []
-            for j, col in enumerate(row):
+            for j, col in row.items():
                 for i, part in enumerate(col):
                     if len(rows) <= i:
-                        rows.append([[] for _ in range(len(row))])
+                        rows.append(defaultdict(list))
                     rows[i][j].append(part)
                     assert len(rows[i][j]) == 1
 
             split_table += rows
 
-        self.table_data = split_table
-        print("self.table_data", self.table_data)
-
-    def join_cells_content(self, table_output):
-        for i, row in enumerate(table_output):
-            for j, col in enumerate(row):
-                table_output[i][j] = " ".join(col)
-
-        return table_output
-
-    def remove_low_content_rows(self, table_output):
-        total_row_lengths = sum(len("".join(row)) for row in table_output)
-        mean_row_length = (
-            total_row_lengths / len(table_output) if len(table_output) > 0 else 0
+        self.table_data = defaultdict(
+            lambda: defaultdict(list), {i: row for i, row in enumerate(split_table)}
         )
-        return [
-            row for row in table_output if len("".join(row)) / mean_row_length > 0.1
+
+    def join_cells_content(self, table_data):
+        for i, row in enumerate(table_data):
+            for j, col in enumerate(row):
+                table_data[i][j] = " ".join(col)
+
+        return table_data
+
+    def join_cell_parts(self, cell):
+        texts = [cell_part["text"] for cell_part in cell]
+        return {"text": " ".join(texts), "confidence": None}
+
+    def clean_cell_text(self, cell_text):
+        cell_text = ILLEGAL_CHARACTERS_RE.sub(r"", cell_text)
+        if self.is_numeric_cell(cell_text):
+            cell_text = cell_text.replace(".", "").replace(",", "")
+            fixed_decimal_places = self.page.document.fixed_decimal_places
+            if cell_text and fixed_decimal_places > 0:
+                cell_text = (
+                    cell_text[:-fixed_decimal_places]
+                    + "."
+                    + cell_text[-fixed_decimal_places:]
+                )
+
+        return cell_text
+
+    def remove_low_content_rows(self, table_data):
+        total_row_lengths = sum(len("".join(row)) for row in table_data)
+        mean_row_length = (
+            total_row_lengths / len(table_data) if len(table_data) > 0 else 0
+        )
+        return [row for row in table_data if len("".join(row)) / mean_row_length > 0.1]
+
+    def as_clean_matrix(self):
+        n = max([i + 1 for i in self.table_data.keys()], default=0)
+        m = max(
+            [j + 1 for cols in self.table_data.values() for j in cols.keys()], default=0
+        )
+        table_data = [
+            [{"text": "", "confidence": None} for _ in range(m)] for _ in range(n)
         ]
 
-    def build_table(
-        self, image_pad=100, compute_prefix=10**9, show_cropped_bboxes=False
-    ):
-        table_output = self.recognize_texts(
-            image_pad, compute_prefix, show_cropped_bboxes
-        )
-        table_output = self.join_cells_content(table_output)
-        self.table_output = self.remove_low_content_rows(table_output)
+        for row, cols in self.table_data.items():
+            for col, cell in cols.items():
+                cell = self.join_cell_parts(cell)
+                cell["text"] = self.clean_cell_text(cell["text"])
+                table_data[row][col] = cell
 
-    def nlp_postprocess(self, text_language="en", nlp_postprocess_prompt_file=None):
+        return table_data
+
+    def set_table_from_surya_paddle(
+        self,
+        image_pad=100,
+        heuristic_thresh=0.8,
+        compute_prefix=10**9,
+        show_cropped_bboxes=False,
+        show_detected_boxes=False,
+    ):
+        self.recognize_structure(heuristic_thresh)
+
+        if show_detected_boxes:
+            self.visualize_table_bboxes()
+
+        self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
+        # self.table_data = self.remove_low_content_rows(table_data)
+
+    def nlp_postprocess(
+        self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
+    ):
         from postprocessing import nlp_clean
 
-        self.table_output = nlp_clean(
-            self.table_output, text_language, nlp_postprocess_prompt_file
-        )
+        return nlp_clean(table_matrix, text_language, nlp_postprocess_prompt_file)
 
     def save_as_csv(self, output_path):
         with open(output_path, "w", encoding="utf-8") as f_out:
-            output = "\n".join([";".join(row) for row in self.table_output])
+            output = "\n".join([";".join(row) for row in self.table_data])
             f_out.write(output)
 
     def visualize_bboxes(self, img, bboxes):

@@ -13,7 +13,6 @@ class Document:
         relative_path,
         root_dir_path,
         fixed_decimal_places=0,
-        extend_rows=0,
         method="surya+paddle",
     ):
         self.method = method
@@ -32,7 +31,6 @@ class Document:
             ]
 
         self.fixed_decimal_places = fixed_decimal_places
-        self.extend_rows = extend_rows
         self.file_name = self.path.stem
         self.extension = self.path.suffix
         self.root_dir_path = Path(root_dir_path)

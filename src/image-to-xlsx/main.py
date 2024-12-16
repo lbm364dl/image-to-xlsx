@@ -32,7 +32,6 @@ def run(
             relative_path,
             root_dir_path,
             fixed_decimal_places,
-            extend_rows,
             method,
         )
 
@@ -46,6 +45,7 @@ def run(
             p.process_page(
                 unskew=unskew,
                 binarize=binarize,
+                extend_rows=extend_rows,
                 nlp_postprocess=nlp_postprocess,
                 nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
                 text_language=text_language,
@@ -60,4 +60,4 @@ def run(
 
 if __name__ == "__main__":
     args = parse_args()
-    run(args.input_path, **vars(args))
+    run(**vars(args))
