@@ -1,9 +1,7 @@
 from openai import OpenAI
-from io import StringIO
 import dotenv
 import os
 import pandas as pd
-import csv
 
 dotenv.load_dotenv()
 
@@ -16,7 +14,7 @@ lang_name = {
 }
 
 
-def nlp_clean(table_matrix, lang="en", nlp_postprocess_prompt_file=None):
+def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
     client = OpenAI(api_key=TOKEN)
 
     if nlp_postprocess_prompt_file:
@@ -24,23 +22,15 @@ def nlp_clean(table_matrix, lang="en", nlp_postprocess_prompt_file=None):
             prompt = f.read()
     else:
         prompt = f"""
-        I have a CSV where the comma is the separator and all individual values are inside double quotes.
-        Can you try to fix the data inside each pair of duoble quotes? Some information:
+        I have a CSV where the comma is the separator. It has three columns, the first two being numeric, that must not be changed. 
+        The third column contains text, which you should try to fix. Some information that you need for that:
         - Do not change anything from the structure of the data, keep each individual entry as it is. You should only ever change the content of each entry
         - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
-        - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I
-        is probably a 1, an O is probably a 0, a G is probably a 6, etc...
+        - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I is probably a 1, an O is probably a 0, a G is probably a 6, etc...
         - If you find Chinese characters, remove them
-        - Do not add any new separators. For example, if you get a row like
-            1 2,3 ,5 6
-        do not try to split it into more columns like
-            1,2,3,5,6
-        instead just leave it the way it was, like
-            1 2,3,5 6
         - Do not consider a space as another separator. Just leave them the way they are
-        - Remove column with number indexes if there is one
-        - The output should still be a valid CSV, that is, all rows must have the same number of columns
-        - Only reply back with the corrected text
+        - The output should still be a valid CSV, that is, all rows must have the same number of columns. It must have three columns
+        - Only reply back with the corrected text. Do not include headers or anything, start directly with the first row
         """
 
     output = client.chat.completions.create(
@@ -50,27 +40,32 @@ def nlp_clean(table_matrix, lang="en", nlp_postprocess_prompt_file=None):
                 "role": "user",
                 "content": f"""
             {prompt}
-            {table_to_csv(table_matrix)}
+            {table_to_csv(table_data)}
             """,
             }
         ],
     )
 
     content = output.choices[0].message.content.strip("```").strip()
-    print("my_content", content)
-    return csv_to_table(content)
+    return csv_to_table(content, table_data)
 
 
-def table_to_csv(table_matrix):
-    output_csv = pd.DataFrame([
-        [" ".join(col["text"].split()).replace('"', "") for col in row]
-        for row in table_matrix
-    ]).to_csv(quotechar='"', quoting=csv.QUOTE_ALL)
-    print("my_csv", output_csv)
-    return output_csv
-    return "\n".join(";".join(row) for row in table)
+def clean_text(text):
+    return " ".join(text.split()).replace('"', "").replace(",", "")
 
 
-def csv_to_table(csv):
-    print("whatttttt", pd.read_csv(StringIO(csv)))
-    return [row.split(";") for row in csv.split("\n")]
+def table_to_csv(table_data):
+    data = [
+        [str(i), str(j), str(k), clean_text(cell["text"])]
+        for i, row in table_data.items()
+        for j, col in row.items()
+        for k, cell in enumerate(col)
+        if clean_text(cell["text"])
+    ]
+    return pd.DataFrame(data).to_csv(index=False, header=False, escapechar="\\")
+
+
+def csv_to_table(csv, table_data):
+    fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) != 4]
+    for y, x, pos, text in fixed:
+        table_data[int(y)][int(x)][int(pos)]["text"] = text

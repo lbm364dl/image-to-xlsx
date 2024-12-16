@@ -78,19 +78,16 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            sheet = self.document.workbook.create_sheet(
-                f"page_{self.page_num}_table_{i + 1}"
-            )
-            print("my_table_data", table.table_data)
-            table_matrix = table.as_clean_matrix()
-            print("my_table_matrix", table_matrix[:5])
             if kwargs.get("nlp_postprocess"):
-                table_matrix = table.nlp_postprocess(
-                    table_matrix,
+                table.nlp_postprocess(
                     kwargs.get("text_language"),
                     kwargs.get("nlp_postprocess_prompt_file"),
                 )
-                print("my_table_matrix_after_nlp", table_matrix[:5])
+
+            sheet = self.document.workbook.create_sheet(
+                f"page_{self.page_num}_table_{i + 1}"
+            )
+            table_matrix = table.as_clean_matrix()
 
             for row in table_matrix:
                 sheet.append([cell["text"] for cell in row])

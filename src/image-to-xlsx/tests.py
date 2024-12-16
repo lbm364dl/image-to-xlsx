@@ -31,7 +31,7 @@ def test_with_nlp_postprocess():
     output_dir = Path("inputs/results/StatisticalAbstract.1840.exports")
     assert not os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.pdf")
     assert not os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.xlsx")
-    run(input_path, method="pdf-text", nlp_postprocess=1)
+    run(input_path, last_page=1, method="pdf-text", nlp_postprocess=1)
     assert os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.pdf")
     assert os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.xlsx")
     shutil.rmtree(output_dir)

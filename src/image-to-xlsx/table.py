@@ -227,12 +227,10 @@ class Table:
         self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
         # self.table_data = self.remove_low_content_rows(table_data)
 
-    def nlp_postprocess(
-        self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
-    ):
+    def nlp_postprocess(self, text_language="en", nlp_postprocess_prompt_file=None):
         from postprocessing import nlp_clean
 
-        return nlp_clean(table_matrix, text_language, nlp_postprocess_prompt_file)
+        return nlp_clean(self.table_data, text_language, nlp_postprocess_prompt_file)
 
     def save_as_csv(self, output_path):
         with open(output_path, "w", encoding="utf-8") as f_out:
