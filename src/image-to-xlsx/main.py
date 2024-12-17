@@ -20,6 +20,7 @@ def run(
     first_page=1,
     last_page=INF,
     heuristic_thresh=0.6,
+    textract_response_pickle_file=None,
 ):
     from document import Document
     from page import Page
@@ -53,6 +54,7 @@ def run(
                 compute_prefix=compute_prefix,
                 image_pad=image_pad,
                 heuristic_thresh=heuristic_thresh,
+                textract_response_pickle_file=textract_response_pickle_file,
             )
 
         d.save_output()

@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices={"surya+paddle", "pdf-text"},
+        choices={"surya+paddle", "pdf-text", "textract-pickle-debug"},
         help=textwrap.dedent("""\
         Method to use for table recognition. Default surya+paddle. Methods:
         - surya+paddle: opensource AI table recognition using surya library and OCR each cell using Paddle
@@ -98,6 +98,12 @@ def parse_args():
         type=int,
         help="Forcefully write a decimal point this number of places to the left of the last digit. By default no decimal points are added.",
         default=0,
+    )
+    parser.add_argument(
+        "--textract-response-pickle-file",
+        type=str,
+        help="Path to pkl file with Textract response for a particular page. Use for debugging and not calling the API all the time",
+        default=None,
     )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

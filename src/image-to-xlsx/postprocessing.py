@@ -26,7 +26,9 @@ def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
         The third column contains text, which you should try to fix. Some information that you need for that:
         - Do not change anything from the structure of the data, keep each individual entry as it is. You should only ever change the content of each entry
         - Assume words are in {lang_name.get(lang) or lang_name["en"]} and may contain spelling mistakes
-        - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I is probably a 1, an O is probably a 0, a G is probably a 6, etc...
+        - Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I is probably a 1, an O is probably a 0, a G is probably a 6, IO is probably 10, etc...
+        - In text cells there may be some shortened words referring to unit measures. Leave them like that, but you may remove unnecessary punctuation
+        - There may be some indicators of footnotes in text, e.g., "7) 43423" contains numeric data (43423) and note number 7
         - If you find Chinese characters, remove them
         - Do not consider a space as another separator. Just leave them the way they are
         - The output should still be a valid CSV, that is, all rows must have the same number of columns. It must have three columns
@@ -66,6 +68,6 @@ def table_to_csv(table_data):
 
 
 def csv_to_table(csv, table_data):
-    fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) != 4]
+    fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) == 4]
     for y, x, pos, text in fixed:
         table_data[int(y)][int(x)][int(pos)]["text"] = text

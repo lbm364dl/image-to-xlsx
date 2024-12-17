@@ -10,6 +10,7 @@ from surya.tables import batch_table_recognition
 from surya.input.pdflines import get_table_blocks
 from tabled.assignment import assign_rows_columns
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from openpyxl.styles import PatternFill, Border, Side
 
 
 class Table:
@@ -135,6 +136,69 @@ class Table:
             for j, col in enumerate(row):
                 self.table_data[i][j] = [{"text": col, "confidence": None}]
 
+    def set_table_from_textract_pickle(self, textract_table, id_to_block):
+        # TODO: Check merged cells
+        table_cells = [
+            id_to_block[id]
+            for relationship in textract_table.get("Relationships", [])
+            for id in relationship["Ids"]
+            if id_to_block[id]["BlockType"] == "CELL"
+        ]
+
+        self.table_data = defaultdict(lambda: defaultdict(list))
+        for cell in table_cells:
+            words = [
+                id_to_block[id]
+                for relationship in cell.get("Relationships", [])
+                for id in relationship["Ids"]
+                if id_to_block[id]["BlockType"] == "WORD"
+            ]
+            row, col = cell["RowIndex"], cell["ColumnIndex"]
+            self.table_data[row - 1][col - 1] = [
+                {"text": word["Text"], "confidence": word["Confidence"]}
+                for word in words
+            ]
+
+    def add_to_sheet(self, sheet_name, table_matrix):
+        thin_white_border = Border(
+            left=Side(style="thin", color="FFFFFF"),
+            right=Side(style="thin", color="FFFFFF"),
+            top=Side(style="thin", color="FFFFFF"),
+            bottom=Side(style="thin", color="FFFFFF"),
+        )
+
+        sheet = self.page.document.workbook.create_sheet(sheet_name)
+
+        for i, row in enumerate(table_matrix, 1):
+            for j, col in enumerate(row, 1):
+                cell = sheet.cell(row=i, column=j, value=col["text"])
+                cell_color = self.get_cell_color(col["confidence"])
+                if cell_color:
+                    cell.fill = PatternFill(start_color=cell_color, fill_type="solid")
+                    cell.border = thin_white_border
+
+    def get_cell_color(self, confidence):
+        if not confidence:
+            return None
+
+        color_scale = [
+            (95, "00C957"),  # Emerald Green
+            (90, "00FF7F"),  # Spring Green
+            (85, "C0FF00"),  # Yellow-Green
+            (80, "FFFF00"),  # Yellow
+            (70, "FFC000"),  # Light Orange
+            (60, "FF8000"),  # Orange
+            (50, "FF4000"),  # Orange-Red
+            (40, "FF2000"),  # Deep Orange-Red
+            (0, "FF0000"),  # Bright Red
+        ]
+
+        for threshold, color in color_scale:
+            if confidence >= threshold:
+                return color
+
+        return "FF0000"
+
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
             text = text.replace(".", "").replace(",", "")
@@ -171,7 +235,12 @@ class Table:
 
     def join_cell_parts(self, cell):
         texts = [cell_part["text"] for cell_part in cell]
-        return {"text": " ".join(texts), "confidence": None}
+        conf_arr = np.array([cell_part["confidence"] for cell_part in cell])
+        confidence = conf_arr.mean()
+        return {
+            "text": " ".join(texts),
+            "confidence": confidence if not np.isnan(confidence) else None,
+        }
 
     def clean_cell_text(self, cell_text):
         cell_text = ILLEGAL_CHARACTERS_RE.sub(r"", cell_text)
