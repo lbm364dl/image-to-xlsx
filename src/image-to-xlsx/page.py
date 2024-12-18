@@ -83,13 +83,17 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
+            table_matrix = table.as_clean_matrix()
+            table_matrix = table.maybe_parse_numeric_cells(table_matrix)
+            print(table_matrix)
+
             if kwargs.get("nlp_postprocess"):
                 table.nlp_postprocess(
+                    table_matrix,
                     kwargs.get("text_language"),
                     kwargs.get("nlp_postprocess_prompt_file"),
                 )
 
-            table_matrix = table.as_clean_matrix()
             table.add_to_sheet(f"page_{self.page_num}_table_{i + 1}", table_matrix)
 
     def get_page_tables_surya_plus_paddle(self, **kwargs):

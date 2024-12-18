@@ -35,6 +35,9 @@ def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
         - Only reply back with the corrected text. Do not include headers or anything, start directly with the first row
         """
 
+    print("my_prompt", prompt)
+    print("my_table_data", table_data)
+
     output = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -48,7 +51,9 @@ def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
         ],
     )
 
+
     content = output.choices[0].message.content.strip("```").strip()
+    print("my_response", content)
     return csv_to_table(content, table_data)
 
 
@@ -58,16 +63,15 @@ def clean_text(text):
 
 def table_to_csv(table_data):
     data = [
-        [str(i), str(j), str(k), clean_text(cell["text"])]
-        for i, row in table_data.items()
-        for j, col in row.items()
-        for k, cell in enumerate(col)
+        [str(i), str(j), clean_text(cell["text"])]
+        for i, row in enumerate(table_data)
+        for j, cell in enumerate(row)
         if clean_text(cell["text"])
     ]
     return pd.DataFrame(data).to_csv(index=False, header=False, escapechar="\\")
 
 
 def csv_to_table(csv, table_data):
-    fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) == 4]
-    for y, x, pos, text in fixed:
-        table_data[int(y)][int(x)][int(pos)]["text"] = text
+    fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) == 3]
+    for y, x, text in fixed:
+        table_data[int(y)][int(x)]["text"] = text

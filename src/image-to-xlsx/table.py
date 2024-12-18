@@ -2,6 +2,8 @@ import os
 import numpy as np
 import cv2
 import pretrained
+import re
+from utils import split_footnotes
 from collections import defaultdict
 from definitions import OUTPUT_PATH
 from PIL import Image
@@ -11,6 +13,7 @@ from surya.input.pdflines import get_table_blocks
 from tabled.assignment import assign_rows_columns
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import PatternFill, Border, Side
+from openpyxl.comments import Comment
 
 
 class Table:
@@ -122,13 +125,15 @@ class Table:
             for cell, pred in zip(self.table["cells"], output):
                 row_ids, col_ids = cell.row_ids, cell.col_ids
                 row_id, col_id = row_ids[0], col_ids[0]
-                add_text = " ".join(pred["rec_text"])
-                add_text = self.maybe_clean_numeric_cell(add_text)
-                if add_text:
-                    self.table_data[row_id][col_id].append({
-                        "text": add_text,
-                        "confidence": None,
-                    })
+                # print("pred", pred)
+                # add_text = " ".join(pred["rec_text"])
+                # add_text = self.maybe_clean_numeric_cell(add_text)
+
+                # if add_text:
+                self.table_data[row_id][col_id] += [
+                    {"text": text, "confidence": confidence}
+                    for text, confidence in zip(pred["rec_text"], pred["rec_score"])
+                ]
 
     def set_table_from_pdf_text(self, table):
         self.table_data = defaultdict(dict)
@@ -176,6 +181,8 @@ class Table:
                 if cell_color:
                     cell.fill = PatternFill(start_color=cell_color, fill_type="solid")
                     cell.border = thin_white_border
+                    if col["footnotes"]:
+                        cell.comment = Comment(",".join(col["footnotes"]), "automatic")
 
     def get_cell_color(self, confidence):
         if not confidence:
@@ -235,7 +242,9 @@ class Table:
 
     def join_cell_parts(self, cell):
         texts = [cell_part["text"] for cell_part in cell]
-        conf_arr = np.array([cell_part["confidence"] for cell_part in cell])
+        conf_arr = np.array([
+            cell_part["confidence"] for cell_part in cell if cell_part["confidence"]
+        ])
         confidence = conf_arr.mean()
         return {
             "text": " ".join(texts),
@@ -269,16 +278,46 @@ class Table:
             [j + 1 for cols in self.table_data.values() for j in cols.keys()], default=0
         )
         table_data = [
-            [{"text": "", "confidence": None} for _ in range(m)] for _ in range(n)
+            [{"text": "", "confidence": None, "footnotes": []} for _ in range(m)]
+            for _ in range(n)
         ]
 
         for row, cols in self.table_data.items():
             for col, cell in cols.items():
                 cell = self.join_cell_parts(cell)
                 cell["text"] = self.clean_cell_text(cell["text"])
+                cell["text"], cell["footnotes"] = split_footnotes(cell["text"])
+                if cell["footnotes"]:
+                    print("cell with footnotes", cell)
                 table_data[row][col] = cell
 
         return table_data
+
+    def maybe_parse_numeric_cells(self, table_matrix):
+        for i, row in enumerate(table_matrix):
+            for j, col in enumerate(row):
+                table_matrix[i][j]["text"], forced_numeric = (
+                    self.maybe_parse_numeric_cell(col["text"])
+                )
+                # Override confidence so that someone has to review just in case
+                if forced_numeric:
+                    table_matrix[i][j]["confidence"] = 0.0
+
+        return table_matrix
+
+    def maybe_parse_numeric_cell(self, text):
+        if self.is_numeric_cell(text):
+            try:
+                num = int(text)
+                return num, False
+            except ValueError:
+                only_numeric = re.sub(r"\D", "", text)
+                if only_numeric:
+                    return int(only_numeric), True
+                else:
+                    return "", False
+        else:
+            return text, False
 
     def set_table_from_surya_paddle(
         self,
@@ -296,10 +335,12 @@ class Table:
         self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
         # self.table_data = self.remove_low_content_rows(table_data)
 
-    def nlp_postprocess(self, text_language="en", nlp_postprocess_prompt_file=None):
+    def nlp_postprocess(
+        self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
+    ):
         from postprocessing import nlp_clean
 
-        return nlp_clean(self.table_data, text_language, nlp_postprocess_prompt_file)
+        return nlp_clean(table_matrix, text_language, nlp_postprocess_prompt_file)
 
     def save_as_csv(self, output_path):
         with open(output_path, "w", encoding="utf-8") as f_out:

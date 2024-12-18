@@ -1,4 +1,5 @@
 from main import run
+from utils import split_footnotes
 import os
 from pathlib import Path
 import shutil
@@ -57,3 +58,20 @@ def test_extend_rows():
     assert os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.pdf")
     assert os.path.isfile(output_dir / "StatisticalAbstract.1840.exports.xlsx")
     shutil.rmtree(output_dir)
+
+
+def test_split_footnotes():
+    s = "3) O 5) 545343 O o (4)"
+    assert split_footnotes(s) == ("545343", ["O", "3", "4", "5"])
+    s = "(3) 545343"
+    assert split_footnotes(s) == ("545343", ["3"])
+    s = "545343 6)"
+    assert split_footnotes(s) == ("545343", ["6"])
+    s = "Hongrie O 1)"
+    assert split_footnotes(s) == ("Hongrie", ["O", "1"])
+    s = "Hongrie o"
+    assert split_footnotes(s) == ("Hongrie", ["O"])
+    s = "Hongrie 0"
+    assert split_footnotes(s) == ("Hongrie", ["O"])
+    s = "12 034"
+    assert split_footnotes(s) == ("12 034", [])
