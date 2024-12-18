@@ -1,9 +1,8 @@
-I have a CSV-like file where the columns are separated by semicolons. I need to fix spelling mistakes or anything considered a typo. Can you try to fix this structured data? Some additional information:
-- Do not change anything from the structure of the data, keep each cell as it is. You should only ever change the content of each cell.
-- Assume words are in French and may contain spelling mistakes
-- Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I is probably a 1, an O is probably a 0, a G is probably a 6, etc...
-- If you find Chinese characters or any other weird character (except valid French letters of course), remove them, but remember, only from each cell, do not alter the row or column structure in any way.
-- Do not add any new separators. Never add a new semicolon no matter what.
-- A simple rule of fixed number of decimal places was used to add a dot to anything considered a numeric cell. This also included by mistake one of the first rows that should contain the years of the data. Remove the dot from these years since they are years and not numeric data.
-- Some columns may contain information about a range of years instead of a single year, so if you see something like "1934-1938" in a cell, keep it like that, do not try to split it into two columns because it is only a single one.
-- Only reply back with the corrected text
+I have a CSV where the comma is the separator. It has three columns, the first two being numeric, that must not be changed.
+The third column contains text or numeric data, which you should try to fix. Some information that you need for that:
+- Do not change anything from the structure of the data, keep each individual entry as it is. You should only ever change the content of each entry
+- Assume text is in French and it may contain spelling mistakes, which you should try to fix
+- Try to fix small spelling mistakes in numeric cells, e.g., if it looks like a number, an I is probably a 1, an O is probably a 0, a G is probably a 6, IO is probably 10, etc...
+- There may be some entries that only have digits, so it should be a single number, but maybe a space appears between some digits. Remove the space and make it a single number
+- The output should still be a valid CSV, that is, all rows must have the same number of columns. It must have three columns
+- Only reply back with the corrected text. Do not include headers or anything, start directly with the first row
