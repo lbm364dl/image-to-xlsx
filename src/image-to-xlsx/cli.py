@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices={"surya+paddle", "pdf-text", "textract-pickle-debug"},
+        choices={"surya+paddle", "pdf-text", "textract", "textract-pickle-debug"},
         help=textwrap.dedent("""\
         Method to use for table recognition. Default surya+paddle. Methods:
         - surya+paddle: opensource AI table recognition using surya library and OCR each cell using Paddle

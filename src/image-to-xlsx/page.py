@@ -1,6 +1,8 @@
 import numpy as np
 import pretrained
 import pickle
+import io
+import boto3
 from table import Table
 from unskewing import correct_skew
 from binarization import binarize
@@ -71,6 +73,7 @@ class Page:
         get_page_tables_method = {
             "surya+paddle": self.get_page_tables_surya_plus_paddle,
             "pdf-text": self.get_page_tables_with_pdf_text,
+            "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
         }
 
@@ -137,31 +140,53 @@ class Page:
 
         return tables
 
-    def get_page_tables_textract_pickle(self, **kwargs):
+    def get_page_tables_textract(self, **kwargs):
         if kwargs.get("unskew"):
             self.rotate(delta=0.05, limit=5)
 
         if kwargs.get("binarize"):
             self.binarize(method="otsu", block_size=31, constant=10)
 
+        response = self.get_textract_response()
+        return self.build_textract_tables_from_response(response)
+
+    def get_page_tables_textract_pickle(self, **kwargs):
         with open(kwargs.get("textract_response_pickle_file"), "rb") as f:
-            blocks = pickle.load(f)["Blocks"]
+            response = pickle.load(f)
+
+        return self.build_textract_tables_from_response(response)
+
+    def get_textract_response(self):
+        textract = boto3.client("textract")
+        img_byte_arr = io.BytesIO()
+        self.page.save(img_byte_arr, format="PNG")
+        img_byte_arr = img_byte_arr.getvalue()
+
+        return textract.analyze_document(
+            Document={"Bytes": img_byte_arr},
+            FeatureTypes=["TABLES"],
+        )
+
+    def build_textract_tables_from_response(self, response):
+        blocks = response["Blocks"]
 
         file_tables = [block for block in blocks if block["BlockType"] == "TABLE"]
         id_to_block = {block["Id"]: block for block in blocks}
 
         tables = []
         for table in file_tables:
-            bbox = table["Geometry"]["BoundingBox"]
-            y, x = self.to_int(self.page, bbox["Top"], bbox["Left"])
-            height, width = self.to_int(self.page, bbox["Height"], bbox["Width"])
-            bbox = [x, y, x + width, y + height]
-
+            bbox = self.get_textract_table_bbox(table)
             t = Table(self.page, self.text_lines, self, bbox)
             t.set_table_from_textract_pickle(table, id_to_block)
             tables.append(t)
 
         return tables
+
+    def get_textract_table_bbox(self, table):
+        bbox = table["Geometry"]["BoundingBox"]
+        y, x = self.to_int(self.page, bbox["Top"], bbox["Left"])
+        height, width = self.to_int(self.page, bbox["Height"], bbox["Width"])
+        return [x, y, x + width, y + height]
 
     def to_int(self, img, y, x):
         w, h = img.size
