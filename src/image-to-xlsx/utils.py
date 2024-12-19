@@ -26,11 +26,18 @@ def get_document_paths(input_path):
 
 def split_footnotes(text):
     clean_text = text
-    end_footnote = re.findall(r"\s\(?[^\s]+?\)", text)
-    start_footnote = re.findall(r"\(?[^\s]+?\)\s", text)
-    circle_footnote = re.findall(r"\s[O0o](?=$|\D)", text)
-    all_footnotes = end_footnote + start_footnote + circle_footnote
-    # print("all_footnotes", all_footnotes)
+    end_footnote = re.findall(r"\s\(?\S+?\)", text)
+    start_footnote = re.findall(r"\(?\S+?\)\s", text)
+    only_footnote = re.findall(r"^\(?\S+?\)$", text)
+    circle_footnote_after = re.findall(r"\s[O0o](?!\d)", text)
+    circle_footnote_before = re.findall(r"(?<!\d)[O0o]\s", text)
+    all_footnotes = (
+        end_footnote
+        + start_footnote
+        + circle_footnote_after
+        + circle_footnote_before
+        + only_footnote
+    )
     clean_footnotes = set()
     for footnote in all_footnotes:
         clean_text = clean_text.replace(footnote, "")
@@ -39,5 +46,4 @@ def split_footnotes(text):
             clean_footnote = "O"
         clean_footnotes.add(clean_footnote)
 
-    # print("original", text, "clean_text", clean_text, "clean_footnotes", clean_footnotes)
     return clean_text, sorted(clean_footnotes)

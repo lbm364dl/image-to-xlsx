@@ -125,11 +125,7 @@ class Table:
             for cell, pred in zip(self.table["cells"], output):
                 row_ids, col_ids = cell.row_ids, cell.col_ids
                 row_id, col_id = row_ids[0], col_ids[0]
-                # print("pred", pred)
-                # add_text = " ".join(pred["rec_text"])
-                # add_text = self.maybe_clean_numeric_cell(add_text)
 
-                # if add_text:
                 self.table_data[row_id][col_id] += [
                     {"text": text, "confidence": confidence}
                     for text, confidence in zip(pred["rec_text"], pred["rec_score"])
@@ -185,7 +181,7 @@ class Table:
                         cell.comment = Comment(",".join(col["footnotes"]), "automatic")
 
     def get_cell_color(self, confidence):
-        if not confidence:
+        if confidence is None:
             return None
 
         color_scale = [
@@ -197,14 +193,14 @@ class Table:
             (60, "FF8000"),  # Orange
             (50, "FF4000"),  # Orange-Red
             (40, "FF2000"),  # Deep Orange-Red
-            (0, "FF0000"),  # Bright Red
+            (0, "B22222"),  # Crimson Red
         ]
 
         for threshold, color in color_scale:
             if confidence >= threshold:
                 return color
 
-        return "FF0000"
+        return "B22222"
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):
@@ -287,8 +283,6 @@ class Table:
                 cell = self.join_cell_parts(cell)
                 cell["text"] = self.clean_cell_text(cell["text"])
                 cell["text"], cell["footnotes"] = split_footnotes(cell["text"])
-                if cell["footnotes"]:
-                    print("cell with footnotes", cell)
                 table_data[row][col] = cell
 
         return table_data
@@ -311,9 +305,12 @@ class Table:
                 num = int(text)
                 return num, False
             except ValueError:
-                only_numeric = re.sub(r"\D", "", text)
+                only_numeric = re.sub(r"[^-0-9]", "", text)
                 if only_numeric:
-                    return int(only_numeric), True
+                    try:
+                        return int(only_numeric), True
+                    except ValueError:
+                        return only_numeric, False
                 else:
                     return "", False
         else:

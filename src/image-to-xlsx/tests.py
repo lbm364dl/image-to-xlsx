@@ -62,16 +62,26 @@ def test_extend_rows():
 
 def test_split_footnotes():
     s = "3) O 5) 545343 O o (4)"
-    assert split_footnotes(s) == ("545343", ["O", "3", "4", "5"])
+    assert split_footnotes(s) == ("545343", ["3", "4", "5", "O"])
     s = "(3) 545343"
     assert split_footnotes(s) == ("545343", ["3"])
     s = "545343 6)"
     assert split_footnotes(s) == ("545343", ["6"])
     s = "Hongrie O 1)"
-    assert split_footnotes(s) == ("Hongrie", ["O", "1"])
+    assert split_footnotes(s) == ("Hongrie", ["1", "O"])
     s = "Hongrie o"
     assert split_footnotes(s) == ("Hongrie", ["O"])
     s = "Hongrie 0"
     assert split_footnotes(s) == ("Hongrie", ["O"])
+    s = "0 Hongrie 0"
+    assert split_footnotes(s) == ("Hongrie", ["O"])
     s = "12 034"
     assert split_footnotes(s) == ("12 034", [])
+    s = "10 434"
+    assert split_footnotes(s) == ("10 434", [])
+    s = "10 034"
+    assert split_footnotes(s) == ("10 034", [])
+    s = "b)"
+    assert split_footnotes(s) == ("", ["b"])
+    s = "(3)"
+    assert split_footnotes(s) == ("", ["3"])

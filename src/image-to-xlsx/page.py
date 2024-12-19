@@ -85,7 +85,6 @@ class Page:
 
             table_matrix = table.as_clean_matrix()
             table_matrix = table.maybe_parse_numeric_cells(table_matrix)
-            print(table_matrix)
 
             if kwargs.get("nlp_postprocess"):
                 table.nlp_postprocess(
