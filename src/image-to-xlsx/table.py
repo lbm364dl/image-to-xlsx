@@ -30,6 +30,7 @@ class Table:
         ocr_pipeline=None,
     ):
         self.page = page
+        self.footer_text = None
 
         if not page.document.method == "pdf-text":
             self.text_lines = text_lines
@@ -160,7 +161,23 @@ class Table:
                 for word in words
             ]
 
-    def add_to_sheet(self, sheet_name, table_matrix):
+        self.footer_text = self.get_table_footer_text(textract_table, id_to_block)
+
+    def get_table_footer_text(self, table, id_to_block):
+        return "\n".join([
+            " ".join([
+                id_to_block[id]["Text"]
+                for rel in footer.get("Relationships", [])
+                if rel["Type"] == "CHILD"
+                for id in rel["Ids"]
+                if id_to_block[id]["BlockType"] == "WORD"
+            ])
+            for rel in table.get("Relationships", [])
+            if rel["Type"] == "TABLE_FOOTER"
+            for footer in [id_to_block[id] for id in rel["Ids"]]
+        ])
+
+    def add_to_sheet(self, page_num, table_num, table_matrix, footer_text):
         thin_white_border = Border(
             left=Side(style="thin", color="FFFFFF"),
             right=Side(style="thin", color="FFFFFF"),
@@ -168,6 +185,13 @@ class Table:
             bottom=Side(style="thin", color="FFFFFF"),
         )
 
+        self.page.document.footers_workbook.active.append([
+            page_num,
+            table_num,
+            footer_text,
+        ])
+
+        sheet_name = f"page_{page_num}_table_{table_num}"
         sheet = self.page.document.workbook.create_sheet(sheet_name)
 
         for i, row in enumerate(table_matrix, 1):

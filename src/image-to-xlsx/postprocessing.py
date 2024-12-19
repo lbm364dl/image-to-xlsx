@@ -75,3 +75,5 @@ def csv_to_table(csv, table_data):
     fixed = [row.split(",") for row in csv.split("\n") if len(row.split(",")) == 3]
     for y, x, text in fixed:
         table_data[int(y)][int(x)]["text"] = text
+
+    return table_data

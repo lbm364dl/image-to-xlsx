@@ -37,6 +37,12 @@ class Document:
         self.relative_path = Path(relative_path)
         self.workbook = Workbook()
         self.workbook.remove(self.workbook.active)
+        self.footers_workbook = Workbook()
+        self.footers_workbook.active.append([
+            "page_number",
+            "table_number",
+            "footer_text",
+        ])
 
     def save_output(self):
         stem = self.relative_path.stem
@@ -45,3 +51,5 @@ class Document:
         output_xlsx_path = output_dir / f"{self.relative_path.stem}.xlsx"
         self.workbook.save(output_xlsx_path)
         shutil.copy(self.path, output_dir)
+        footers_xlsx_path = output_dir / f"footers_{self.relative_path.stem}.xlsx"
+        self.footers_workbook.save(footers_xlsx_path)
