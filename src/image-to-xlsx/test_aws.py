@@ -10,13 +10,13 @@ textract = boto3.client("textract")
 # Specify the document file
 
 # document_path = "IIA/1938-39_pag_306_307centenosup_prod_rend.pdf"
-document_path = "inputs/StatisticalAbstract/StatisticalAbstract.16.exports.pp1.pdf"
+document_path = "inputs/test_footnotes.pdf"
 
 pages, _, text_lines = load_from_file(
     document_path, dpi=settings.IMAGE_DPI_HIGHRES, load_text_lines=True
 )
 
-img = pages[1]
+img = pages[4]
 img_byte_arr = io.BytesIO()
 img.save(img_byte_arr, format="PNG")
 img_byte_arr = img_byte_arr.getvalue()
@@ -29,7 +29,7 @@ response = textract.analyze_document(
 
 print("my aws response", response)
 
-with open("test_output_justin2.pkl", "wb") as f:
+with open("test_footnotes_p4.pkl", "wb") as f:
     pickle.dump(response, f)
 
 # Process the response

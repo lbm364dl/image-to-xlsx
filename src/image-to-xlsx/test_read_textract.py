@@ -73,27 +73,47 @@ def process_table(table, id_to_block, table_idx):
     output_table = [[[] for _ in range(m)] for _ in range(n)]
     for row, cols in table.items():
         for col, text in cols.items():
-            output_table[row-1][col-1].append(text)
+            output_table[row - 1][col - 1].append(text)
 
     for row in output_table:
         print(row)
 
     with open(f"test_justin2_{table_idx}.csv", "w") as f_out:
-        f_out.write('\n'.join(';'.join(' '.join(col) for col in row) for row in output_table).replace('"', ""))
+        f_out.write(
+            "\n".join(
+                ";".join(" ".join(col) for col in row) for row in output_table
+            ).replace('"', "")
+        )
 
 
-document_path = "inputs/StatisticalAbstract/StatisticalAbstract.16.exports.pp1.pdf"
+document_path = "inputs/test_footnotes.pdf"
 pages, _, text_lines = load_from_file(
     document_path, dpi=settings.IMAGE_DPI_HIGHRES, load_text_lines=True
 )
-img = pages[1]
+img = pages[4]
 
-with open("test_output_justin2.pkl", "rb") as f:
+with open("test_footnotes_p4.pkl", "rb") as f:
     loaded_dict = pickle.load(f)
 
 blocks = loaded_dict["Blocks"]
-tables = [block for block in blocks if block["BlockType"] == "TABLE"]
+print("BlockTypes", {block["BlockType"] for block in blocks})
 id_to_block = {block["Id"]: block for block in blocks}
+tables = [block for block in blocks if block["BlockType"] == "TABLE"]
+
+for table in tables:
+    lines = "\n".join([
+        " ".join([
+            id_to_block[id]["Text"]
+            for rel in footer["Relationships"]
+            if rel["Type"] == "CHILD"
+            for id in rel["Ids"]
+            if id_to_block[id]["BlockType"] == "WORD"
+        ])
+        for rel in table["Relationships"]
+        if rel["Type"] == "TABLE_FOOTER"
+        for footer in [id_to_block[id] for id in rel["Ids"]]
+    ])
+    print("lines", lines)
 
 for i, table in enumerate(tables):
     print("Processing table...")
