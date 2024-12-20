@@ -311,15 +311,22 @@ class Table:
 
         return table_data
 
-    def maybe_parse_numeric_cells(self, table_matrix):
+    def overwrite_seminumeric_cells_confidence(self, table_matrix):
         for i, row in enumerate(table_matrix):
             for j, col in enumerate(row):
-                table_matrix[i][j]["text"], forced_numeric = (
-                    self.maybe_parse_numeric_cell(col["text"])
-                )
+                _, forced_numeric = self.maybe_parse_numeric_cell(col["text"])
                 # Override confidence so that someone has to review just in case
                 if forced_numeric:
                     table_matrix[i][j]["confidence"] = 0.0
+
+        return table_matrix
+
+    def maybe_parse_numeric_cells(self, table_matrix):
+        for i, row in enumerate(table_matrix):
+            for j, col in enumerate(row):
+                table_matrix[i][j]["text"], _ = self.maybe_parse_numeric_cell(
+                    col["text"]
+                )
 
         return table_matrix
 

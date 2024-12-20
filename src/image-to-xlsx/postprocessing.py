@@ -35,9 +35,6 @@ def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
         - Only reply back with the corrected text. Do not include headers or anything, start directly with the first row
         """
 
-    print("my_prompt", prompt)
-    print("my_table_data", table_data)
-
     output = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -51,9 +48,7 @@ def nlp_clean(table_data, lang="en", nlp_postprocess_prompt_file=None):
         ],
     )
 
-
     content = output.choices[0].message.content.strip("```").strip()
-    print("my_response", content)
     return csv_to_table(content, table_data)
 
 

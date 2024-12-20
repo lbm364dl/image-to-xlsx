@@ -84,6 +84,7 @@ class Page:
                 table.extend_rows()
 
             table_matrix = table.as_clean_matrix()
+            table_matrix = table.overwrite_seminumeric_cells_confidence(table_matrix)
 
             if kwargs.get("nlp_postprocess"):
                 table_matrix = table.nlp_postprocess(
@@ -91,11 +92,10 @@ class Page:
                     kwargs.get("text_language"),
                     kwargs.get("nlp_postprocess_prompt_file"),
                 )
-                print("table_matrix", table_matrix)
 
             table_matrix = table.maybe_parse_numeric_cells(table_matrix)
 
-            table.add_to_sheet(self.page_num, i+1, table_matrix, table.footer_text)
+            table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
     def get_page_tables_surya_plus_paddle(self, **kwargs):
         self.set_models(**pretrained.all_models())
