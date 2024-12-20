@@ -21,6 +21,7 @@ def run(
     last_page=INF,
     heuristic_thresh=0.6,
     textract_response_pickle_file=None,
+    overwrite_existing_result=0,
 ):
     from document import Document
     from page import Page
@@ -35,12 +36,13 @@ def run(
             fixed_decimal_places,
             method,
         )
+        if not overwrite_existing_result and d.exists_output_dir():
+            print("Skipping already processed document")
+            continue
 
-        first_page = first_page - 1
-        last_page = last_page - 1
         l = list(zip(d.pages, d.text_lines))
         for i, (page, text_lines) in enumerate(
-            l[first_page : last_page + 1], first_page + 1
+            l[first_page-1 : last_page], first_page
         ):
             p = Page(page, i, text_lines, d)
             p.process_page(

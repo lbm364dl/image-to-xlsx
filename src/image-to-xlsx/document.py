@@ -35,6 +35,9 @@ class Document:
         self.extension = self.path.suffix
         self.root_dir_path = Path(root_dir_path)
         self.relative_path = Path(relative_path)
+        self.output_dir = (
+            self.root_dir_path / "results" / self.relative_path
+        ).parent / self.relative_path.stem
         self.workbook = Workbook()
         self.workbook.remove(self.workbook.active)
         self.footers_workbook = Workbook()
@@ -44,12 +47,13 @@ class Document:
             "footer_text",
         ])
 
+    def exists_output_dir(self):
+        return os.path.isdir(self.output_dir)
+
     def save_output(self):
-        stem = self.relative_path.stem
-        output_dir = (self.root_dir_path / "results" / self.relative_path).parent / stem
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_xlsx_path = output_dir / f"{self.relative_path.stem}.xlsx"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        output_xlsx_path = self.output_dir / f"{self.relative_path.stem}.xlsx"
         self.workbook.save(output_xlsx_path)
-        shutil.copy(self.path, output_dir)
-        footers_xlsx_path = output_dir / f"footers_{self.relative_path.stem}.xlsx"
+        shutil.copy(self.path, self.output_dir)
+        footers_xlsx_path = self.output_dir / f"footers_{self.relative_path.stem}.xlsx"
         self.footers_workbook.save(footers_xlsx_path)

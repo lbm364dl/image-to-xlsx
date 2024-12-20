@@ -60,6 +60,29 @@ def test_extend_rows():
     shutil.rmtree(output_dir)
 
 
+def test_dir_input():
+    input_path = Path("inputs/StatisticalAbstract")
+    output_dir = Path("inputs/StatisticalAbstract/results")
+    assert os.path.isfile(input_path / "StatisticalAbstract.1840.exports.pdf")
+    assert os.path.isfile(input_path / "StatisticalAbstract.85.exports.pp1.pdf")
+    assert not os.path.isdir(output_dir)
+    run(input_path, last_page=1, method="pdf-text")
+    assert os.path.isdir(output_dir)
+    assert os.path.isdir(output_dir / "StatisticalAbstract.1840.exports")
+    assert os.path.isdir(output_dir / "StatisticalAbstract.85.exports.pp1")
+    assert os.path.isfile(
+        output_dir
+        / "StatisticalAbstract.1840.exports"
+        / "StatisticalAbstract.1840.exports.pdf"
+    )
+    assert os.path.isfile(
+        output_dir
+        / "StatisticalAbstract.85.exports.pp1"
+        / "StatisticalAbstract.85.exports.pp1.pdf"
+    )
+    shutil.rmtree(output_dir)
+
+
 def test_split_footnotes():
     s = "3) O 5) 545343 O o (4)"
     assert split_footnotes(s) == ("545343", ["3", "4", "5", "O"])
@@ -72,9 +95,7 @@ def test_split_footnotes():
     s = "Hongrie o"
     assert split_footnotes(s) == ("Hongrie", ["O"])
     s = "Hongrie 0"
-    assert split_footnotes(s) == ("Hongrie", ["O"])
-    s = "0 Hongrie 0"
-    assert split_footnotes(s) == ("Hongrie", ["O"])
+    assert split_footnotes(s) == ("Hongrie 0", [])
     s = "12 034"
     assert split_footnotes(s) == ("12 034", [])
     s = "10 434"
@@ -85,3 +106,7 @@ def test_split_footnotes():
     assert split_footnotes(s) == ("", ["b"])
     s = "(3)"
     assert split_footnotes(s) == ("", ["3"])
+    s = "China, other than electrical"
+    assert split_footnotes(s) == ("China, other than electrical", [])
+    s = "lasto"
+    assert split_footnotes(s) == ("lasto", [])

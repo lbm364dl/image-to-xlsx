@@ -105,5 +105,12 @@ def parse_args():
         help="Path to pkl file with Textract response for a particular page. Use for debugging and not calling the API all the time",
         default=None,
     )
+    parser.add_argument(
+        "--overwrite-existing-result",
+        type=int,
+        choices={0, 1},
+        help="Process document even if it was already processed before (i.e. it has its individual results directory already created). Default 0 (i.e. skip document)",
+        default=0,
+    )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

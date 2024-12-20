@@ -29,8 +29,8 @@ def split_footnotes(text):
     end_footnote = re.findall(r"\s\(?\S+?\)", text)
     start_footnote = re.findall(r"\(?\S+?\)\s", text)
     only_footnote = re.findall(r"^\(?\S+?\)$", text)
-    circle_footnote_after = re.findall(r"\s[O0o](?!\d)", text)
-    circle_footnote_before = re.findall(r"(?<!\d)[O0o]\s", text)
+    circle_footnote_after = re.findall(r"(\s[Oo])(?=$|\s)", text)
+    circle_footnote_before = re.findall(r"(?:^|\s)([Oo]\s)", text)
     all_footnotes = (
         end_footnote
         + start_footnote
@@ -42,7 +42,7 @@ def split_footnotes(text):
     for footnote in all_footnotes:
         clean_text = clean_text.replace(footnote, "")
         clean_footnote = footnote.strip(" ()")
-        if clean_footnote in "0Oo":
+        if clean_footnote in "Oo":
             clean_footnote = "O"
         clean_footnotes.add(clean_footnote)
 
