@@ -3,6 +3,7 @@ import pretrained
 import pickle
 import io
 import boto3
+import time
 from table import Table
 from unskewing import correct_skew
 from binarization import binarize
@@ -163,19 +164,63 @@ class Page:
 
     def get_textract_response(self):
         textract = boto3.client("textract")
-        img_byte_arr = io.BytesIO()
-        self.page.save(img_byte_arr, format="PNG")
-        img_byte_arr = img_byte_arr.getvalue()
+        # Upload file directly (small enough)
+        try:
+            img_byte_arr = io.BytesIO()
+            self.page.save(img_byte_arr, format="PNG")
+            img_byte_arr = img_byte_arr.getvalue()
 
-        return textract.analyze_document(
-            Document={"Bytes": img_byte_arr},
-            FeatureTypes=["TABLES"],
-        )
+            return textract.analyze_document(
+                Document={"Bytes": img_byte_arr},
+                FeatureTypes=["TABLES"],
+            )
+        # Too large, first upload to S3 and run asynchronous textract
+        except:
+            print("imhereeeeee")
+
+            # Upload the document to S3
+            bucket_name = 'test-textract-large-files'
+            file_name = "tmp_extract_page"
+            s3 = boto3.client('s3')
+            # s3.upload_file(file_name, bucket_name, file_name)
+            s3.put_object(Bucket=bucket_name, Key=file_name, Body=self.page)
+
+            # Call Textract to analyze the document
+            response = textract.start_document_analysis(
+                DocumentLocation={'S3Object': {'Bucket': bucket_name, 'Name': file_name}},
+                FeatureTypes=["TABLES"],  # Extract tables and forms; omit for raw text
+            )
+            
+            print("my aws response", response)
+            
+            job_id = response['JobId']
+            print(f"Started Document Analysis Job. Job ID: {job_id}")
+            
+            # Poll for job completion
+            while True:
+                response = textract.get_document_analysis(JobId=job_id)
+                status = response['JobStatus']
+                print(f"Job Status: {status}")
+                if status in ['SUCCEEDED', 'FAILED']:
+                    break
+                time.sleep(5)
+            
+            if status == 'SUCCEEDED':
+                with open("test_cust.pkl", "wb") as f:
+                    pickle.dump(response, f)
+            else:
+                print("Document analysis failed.")
+            
+            # Delete the file from S3 after processing
+            s3.delete_object(Bucket=bucket_name, Key=file_name)
+            print(f"Deleted {file_name} from bucket {bucket_name}")
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]
+        print("response", response)
 
         file_tables = [block for block in blocks if block["BlockType"] == "TABLE"]
+        print("tables", file_tables)
         id_to_block = {block["Id"]: block for block in blocks}
 
         tables = []
