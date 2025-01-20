@@ -52,7 +52,7 @@ class Page:
         self.layout_processor = layout_processor or pretrained.layout_processor()
         self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline()
 
-    def rotate(self, delta=0.05, limit=5, custom_angle=None):
+    def rotate(self, delta=0.5, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
         self.page = Image.fromarray(corrected)
 
@@ -104,7 +104,7 @@ class Page:
         self.set_models(**pretrained.all_models())
 
         if kwargs.get("unskew"):
-            self.rotate(delta=0.05, limit=5)
+            self.rotate(delta=0.5, limit=5)
 
         if kwargs.get("binarize"):
             self.binarize(method="otsu", block_size=31, constant=10)
@@ -150,7 +150,7 @@ class Page:
 
     def get_page_tables_textract(self, **kwargs):
         if kwargs.get("unskew"):
-            self.rotate(delta=0.05, limit=5)
+            self.rotate(delta=0.5, limit=5)
 
         if kwargs.get("binarize"):
             self.binarize(method="otsu", block_size=31, constant=10)
