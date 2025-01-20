@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import pretrained
 import re
-from utils import split_footnotes
+from utils import split_footnotes, get_cell_color
 from collections import defaultdict
 from definitions import OUTPUT_PATH
 from PIL import Image
@@ -197,34 +197,12 @@ class Table:
         for i, row in enumerate(table_matrix, 1):
             for j, col in enumerate(row, 1):
                 cell = sheet.cell(row=i, column=j, value=col["text"])
-                cell_color = self.get_cell_color(col["confidence"])
+                cell_color = get_cell_color(col["confidence"])
                 if cell_color:
                     cell.fill = PatternFill(start_color=cell_color, fill_type="solid")
                     cell.border = thin_white_border
                     if col["footnotes"]:
                         cell.comment = Comment(",".join(col["footnotes"]), "automatic")
-
-    def get_cell_color(self, confidence):
-        if confidence is None:
-            return None
-
-        color_scale = [
-            (95, "00C957"),  # Emerald Green
-            (90, "00FF7F"),  # Spring Green
-            (85, "C0FF00"),  # Yellow-Green
-            (80, "FFFF00"),  # Yellow
-            (70, "FFC000"),  # Light Orange
-            (60, "FF8000"),  # Orange
-            (50, "FF4000"),  # Orange-Red
-            (40, "FF2000"),  # Deep Orange-Red
-            (0, "B22222"),  # Crimson Red
-        ]
-
-        for threshold, color in color_scale:
-            if confidence >= threshold:
-                return color
-
-        return "B22222"
 
     def maybe_clean_numeric_cell(self, text):
         if self.is_numeric_cell(text):

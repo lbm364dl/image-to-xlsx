@@ -3,12 +3,15 @@ import pretrained
 import pickle
 import io
 import boto3
+import time
+from definitions import MAX_TEXTRACT_SYNC_SIZE
 from table import Table
 from unskewing import correct_skew
 from binarization import binarize
 from PIL import Image
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
+from utils import maybe_reduce_resolution
 
 
 class Page:
@@ -49,7 +52,7 @@ class Page:
         self.layout_processor = layout_processor or pretrained.layout_processor()
         self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline()
 
-    def rotate(self, delta=0.05, limit=5, custom_angle=None):
+    def rotate(self, delta=0.5, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
         self.page = Image.fromarray(corrected)
 
@@ -101,7 +104,7 @@ class Page:
         self.set_models(**pretrained.all_models())
 
         if kwargs.get("unskew"):
-            self.rotate(delta=0.05, limit=5)
+            self.rotate(delta=0.5, limit=5)
 
         if kwargs.get("binarize"):
             self.binarize(method="otsu", block_size=31, constant=10)
@@ -147,7 +150,7 @@ class Page:
 
     def get_page_tables_textract(self, **kwargs):
         if kwargs.get("unskew"):
-            self.rotate(delta=0.05, limit=5)
+            self.rotate(delta=0.5, limit=5)
 
         if kwargs.get("binarize"):
             self.binarize(method="otsu", block_size=31, constant=10)
@@ -162,19 +165,54 @@ class Page:
         return self.build_textract_tables_from_response(response)
 
     def get_textract_response(self):
+        self.page = maybe_reduce_resolution(self.page)
+        self.page.show()
         textract = boto3.client("textract")
         img_byte_arr = io.BytesIO()
         self.page.save(img_byte_arr, format="PNG")
         img_byte_arr = img_byte_arr.getvalue()
 
-        return textract.analyze_document(
-            Document={"Bytes": img_byte_arr},
-            FeatureTypes=["TABLES"],
-        )
+        # Analyze file directly (small enough)
+        if len(img_byte_arr) <= MAX_TEXTRACT_SYNC_SIZE:
+            return textract.analyze_document(
+                Document={"Bytes": img_byte_arr},
+                FeatureTypes=["TABLES"],
+            )
+        # Too large, first upload to S3 and run asynchronous textract
+        else:
+            # Upload the document to S3
+            bucket_name = "test-textract-large-files"
+            file_name = "tmp_extract_page"
+            s3 = boto3.client("s3")
+            # s3.upload_file(file_name, bucket_name, file_name)
+            s3.put_object(Bucket=bucket_name, Key=file_name, Body=img_byte_arr)
+
+            # Call Textract to analyze the document
+            response = textract.start_document_analysis(
+                DocumentLocation={
+                    "S3Object": {"Bucket": bucket_name, "Name": file_name}
+                },
+                FeatureTypes=["TABLES"],  # Extract tables and forms; omit for raw text
+            )
+
+            job_id = response["JobId"]
+
+            # Poll for job completion
+            while True:
+                response = textract.get_document_analysis(JobId=job_id)
+                status = response["JobStatus"]
+                if status in ["SUCCEEDED", "FAILED"]:
+                    break
+                time.sleep(5)
+
+            # Delete the file from S3 after processing
+            s3.delete_object(Bucket=bucket_name, Key=file_name)
+            print(f"Deleted {file_name} from bucket {bucket_name}")
+
+            return response
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]
-
         file_tables = [block for block in blocks if block["BlockType"] == "TABLE"]
         id_to_block = {block["Id"]: block for block in blocks}
 
