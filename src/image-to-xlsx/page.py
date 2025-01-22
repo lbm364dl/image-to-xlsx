@@ -166,7 +166,6 @@ class Page:
 
     def get_textract_response(self):
         self.page = maybe_reduce_resolution(self.page)
-        self.page.show()
         textract = boto3.client("textract")
         img_byte_arr = io.BytesIO()
         self.page.save(img_byte_arr, format="PNG")
