@@ -22,6 +22,9 @@ def run(
     heuristic_thresh=0.6,
     textract_response_pickle_file=None,
     overwrite_existing_result=0,
+    remove_dots_and_commas=0,
+    decimal_separator=".",
+    thousands_separator=",",
 ):
     from document import Document
     from page import Page
@@ -42,7 +45,7 @@ def run(
 
         l = list(zip(d.pages, d.text_lines))
         for i, (page, text_lines) in enumerate(
-            l[first_page-1 : last_page], first_page
+            l[first_page - 1 : last_page], first_page
         ):
             p = Page(page, i, text_lines, d)
             p.process_page(
@@ -57,6 +60,9 @@ def run(
                 image_pad=image_pad,
                 heuristic_thresh=heuristic_thresh,
                 textract_response_pickle_file=textract_response_pickle_file,
+                remove_dots_and_commas=remove_dots_and_commas,
+                decimal_separator=decimal_separator,
+                thousands_separator=thousands_separator,
             )
 
         d.save_output()

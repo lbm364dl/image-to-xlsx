@@ -112,5 +112,26 @@ def parse_args():
         help="Process document even if it was already processed before (i.e. it has its individual results directory already created). Default 0 (i.e. skip document)",
         default=0,
     )
+    parser.add_argument(
+        "--remove-dots-and-commas",
+        type=int,
+        choices={0, 1},
+        help="If the OCR scanning struggles differentiating commas and dots, remove all of them from the output to check manually. Default 0 (i.e. keep them)",
+        default=0,
+    )
+    parser.add_argument(
+        "--decimal-separator",
+        type=str,
+        choices={",", "."},
+        help="Choose the decimal separator between dot or comma. Default dot (.)",
+        default=".",
+    )
+    parser.add_argument(
+        "--thousands-separator",
+        type=str,
+        choices={",", "."},
+        help="Choose the thousands separator between dot or comma. Default dot (,)",
+        default=",",
+    )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))
