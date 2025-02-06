@@ -23,7 +23,7 @@ def get_document_paths(input_path):
         root_dir_path = os.path.dirname(input_path)
         doc_paths = [os.path.basename(input_path)]
 
-    return root_dir_path, doc_paths
+    return Path(root_dir_path), [Path(p) for p in doc_paths]
 
 
 def lowest_color():
