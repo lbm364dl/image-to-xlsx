@@ -1,3 +1,5 @@
+from document import Document
+from page import Page
 from cli import parse_args
 from utils import get_document_paths
 import os
