@@ -1,11 +1,10 @@
 from document import Document
 from page import Page
 from cli import parse_args
-from utils import get_document_paths
+from utils import get_document_paths, save_workbook
+from definitions import INF
 import os
 import shutil
-
-INF = 10**9
 
 
 def run(
@@ -21,8 +20,7 @@ def run(
     image_pad=100,
     fixed_decimal_places=0,
     extend_rows=0,
-    first_page=1,
-    last_page=INF,
+    page_ranges=[(1, INF)],
     heuristic_thresh=0.6,
     textract_response_pickle_file=None,
     **kwargs,
@@ -33,10 +31,18 @@ def run(
         method,
     )
 
+    print("my pages", page_ranges)
+    tot_pages = len(d.pages)
+    page_nums = set()
+    for start, end in page_ranges:
+        page_nums |= set(range(start, min(tot_pages, end) + 1))
+
+    print("my pages", sorted(page_nums))
+
     pages = list(zip(d.pages, d.text_lines))
-    for i, (page, text_lines) in enumerate(
-        pages[first_page - 1 : last_page], first_page
-    ):
+    for i in sorted(page_nums):
+        print(f"    page {i}")
+        page, text_lines = pages[i - 1]
         p = Page(page, i, text_lines, d)
         p.process_page(
             unskew=unskew,
@@ -58,10 +64,10 @@ def run(
 def save_output(table_workbook, footers_workbook, output_dir, file_name):
     output_dir.mkdir(parents=True, exist_ok=True)
     output_xlsx_path = output_dir / f"{file_name}.xlsx"
-    table_workbook.save(output_xlsx_path)
+    save_workbook(table_workbook, output_xlsx_path)
     shutil.copy(real_path, output_dir)
     footers_xlsx_path = output_dir / f"footers_{file_name}.xlsx"
-    footers_workbook.save(footers_xlsx_path)
+    save_workbook(footers_workbook, footers_xlsx_path)
 
 
 if __name__ == "__main__":

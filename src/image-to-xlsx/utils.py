@@ -6,6 +6,14 @@ from PIL import Image
 from definitions import MAX_TEXTRACT_DIMENSION
 
 
+def save_workbook(workbook, where_to_save):
+    try:
+        workbook.save(where_to_save)
+    except IndexError:
+        workbook.create_sheet("Empty")
+        workbook.save(where_to_save)
+
+
 def get_document_paths(input_path):
     doc_paths = []
 
