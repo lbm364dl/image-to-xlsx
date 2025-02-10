@@ -176,4 +176,4 @@ def index():
             )
 
 
-ui.run(native=True)
+ui.run(native=False, reload=False)
