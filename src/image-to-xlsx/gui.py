@@ -122,11 +122,18 @@ def validate_page_range(value):
     return bool(re.match(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", value))
 
 
+def aws_config_present():
+    aws_dir = Path.home() / ".aws"
+    config_file = aws_dir / "config"
+    credentials_file = aws_dir / "credentials"
+    return config_file.exists() and credentials_file.exists()
+
+
 @ui.page("/")
 def index():
     with ui.column().classes("w-full h-full items-center justify-center"):
         with ui.card().classes("p-8 shadow-lg rounded-xl"):
-            ui.select(
+            method_option = ui.select(
                 {
                     "surya+paddle": "Surya and Paddle OCR (free open source)",
                     "pdf-text": "No OCR, use text in PDF",
@@ -135,6 +142,37 @@ def index():
                 value="surya+paddle",
                 on_change=lambda e: toggle_option(e, "method"),
             ).classes("w-full")
+
+            with (
+                ui.column()
+                .bind_visibility_from(method_option, "value", lambda v: v == "textract")
+                .classes("w-full")
+            ):
+                edit_aws_credentials = ui.checkbox("Modify current AWS credentials")
+
+                if not aws_config_present():
+                    edit_aws_credentials = edit_aws_credentials.set_visibility(False)
+
+                aws_options_column = ui.card().classes("w-full")
+                if aws_config_present():
+                    aws_options_column = aws_options_column.bind_visibility_from(
+                        edit_aws_credentials, "value"
+                    )
+
+                with aws_options_column:
+                    ui.label("Configure access to AWS Textract")
+                    ui.input(
+                        "AWS region", on_change=lambda e: toggle_option(e, "region")
+                    ).classes("w-full")
+                    ui.input(
+                        "AWS Access Key Id",
+                        on_change=lambda e: toggle_option(e, "aws_access_key_id"),
+                    ).classes("w-full")
+                    ui.input(
+                        "AWS Secret Access key",
+                        on_change=lambda e: toggle_option(e, "aws_secret_access_key"),
+                    ).classes("w-full")
+
             ui.checkbox(
                 "Try to fix image rotation (can be very slow for large inputs)",
                 on_change=lambda e: toggle_option(e, "unskew"),
@@ -176,4 +214,4 @@ def index():
             )
 
 
-ui.run(native=False, reload=False)
+ui.run(native=True, reload=True)
