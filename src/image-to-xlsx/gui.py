@@ -1,4 +1,4 @@
-from nicegui import app, ui, run, binding, context
+from nicegui import ui, run
 from pathlib import Path
 from definitions import INF
 from multiprocessing import Manager
@@ -14,16 +14,6 @@ uploaded_files = manager.dict()
 in_progress = False
 queue = manager.Queue()
 
-ui.timer(
-    1.0,
-    lambda: (
-        print("elements:", len(context.get_client().elements)),
-        print("bindings:", len(binding.bindings)),
-        print("a. links:", len(binding.active_links)),
-        print("b. props:", len(binding.bindable_properties)),
-    ),
-)
-
 
 def set_page_ranges(event, file_name):
     if not validate_page_range(event.value):
@@ -32,28 +22,20 @@ def set_page_ranges(event, file_name):
     page_ranges = []
     for page_range in event.value.split(","):
         page_range = page_range.split("-")
-        print("page_rangebef", page_range)
         if len(page_range) == 1:
             page_range = [page_range[0], page_range[0]]
-        print("page_rangeaft", page_range)
         start, end = page_range
-        print("start end", start, end)
         page_ranges.append((int(start), int(end)))
 
-    print(page_ranges)
-
     uploaded_files[file_name] = {**uploaded_files[file_name], "pages": page_ranges}
-    print("set_page_ranges", uploaded_files)
 
 
 def handle_upload(file):
-    print("fileee", file)
     uploaded_files[file.name] = {
         "name": file.name,
         "content": file.content,
         "pages": [(1, INF)],
     }
-    print("handle_upload", uploaded_files)
     ui.notify(f"Uploaded {file.name}")
 
     if file.type == "application/pdf":
@@ -77,11 +59,9 @@ def reset_uploaded_files(file_upload):
 
 def toggle_option(event, option):
     options[option] = event.value
-    print("options", options)
 
 
 def extract_tables():
-    print("extract_tables", uploaded_files)
     results = []
     for file in uploaded_files.values():
         queue.put_nowait(f"Processing file {file['name']}")
