@@ -6,10 +6,11 @@ if __name__ in {"__main__", "__mp_main__"}:
     from io import BytesIO
     from utils import save_workbook
     import main
+    import traceback
     import re
     import zipfile
-
-    print("starting code...")
+    import textwrap
+    import botocore.exceptions as aws_exceptions
 
     manager = Manager()
     uploaded_files = manager.dict()
@@ -20,6 +21,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     })
     in_progress = False
     queue = manager.Queue()
+    exception_queue = manager.Queue()
 
     def set_page_ranges(event, file_name):
         if not validate_page_range(event.value):
@@ -35,6 +37,17 @@ if __name__ in {"__main__", "__mp_main__"}:
 
         uploaded_files[file_name] = {**uploaded_files[file_name], "pages": page_ranges}
 
+    def add_to_uploaded_files_list(file_name):
+        with uploaded_files_list:
+            with ui.row(align_items="center"):
+                ui.label(file_name)
+                ui.input(
+                    label="Pages",
+                    placeholder="1,2-5,7-9",
+                    on_change=lambda e: set_page_ranges(e, file_name),
+                    validation={"Wrong page range": validate_page_range},
+                )
+
     def handle_upload(file):
         uploaded_files[file.name] = {
             "name": file.name,
@@ -44,15 +57,7 @@ if __name__ in {"__main__", "__mp_main__"}:
         ui.notify(f"Uploaded {file.name}")
 
         if file.type == "application/pdf":
-            with uploaded_files_list:
-                with ui.row(align_items="center"):
-                    ui.label(file.name)
-                    ui.input(
-                        label="Pages",
-                        placeholder="2-5",
-                        on_change=lambda e: set_page_ranges(e, file.name),
-                        validation={"Wrong page range": validate_page_range},
-                    )
+            add_to_uploaded_files_list(file.name)
 
     def reset_uploaded_files(file_upload):
         uploaded_files.clear()
@@ -67,15 +72,32 @@ if __name__ in {"__main__", "__mp_main__"}:
         results = []
         for file in uploaded_files.values():
             queue.put_nowait(f"Processing file {file['name']}")
-            table_workbook, footers_workbook = main.run(
-                file["content"], page_ranges=file["pages"], **options
-            )
-            results.append({
-                "table_workbook": table_workbook,
-                "footers_workbook": footers_workbook,
-                "name": file["name"],
-                "input_content": file["content"],
-            })
+            try:
+                table_workbook, footers_workbook = main.run(
+                    file["content"], page_ranges=file["pages"], **options
+                )
+                results.append({
+                    "table_workbook": table_workbook,
+                    "footers_workbook": footers_workbook,
+                    "name": file["name"],
+                    "input_content": file["content"],
+                })
+            except (
+                aws_exceptions.EndpointConnectionError,
+                aws_exceptions.NoRegionError,
+            ):
+                exception_queue.put_nowait("Wrong AWS region. Try to fix credentials.")
+                continue
+            except (aws_exceptions.ClientError, aws_exceptions.NoCredentialsError):
+                exception_queue.put_nowait(
+                    "Wrong AWS client credentials. Try to fix them."
+                )
+                continue
+            except Exception:
+                traceback.print_exc()
+                exception_queue.put_nowait(
+                    "Unexpected error, try again or check command line error and contact developers"
+                )
 
         return results
 
@@ -117,12 +139,36 @@ if __name__ in {"__main__", "__mp_main__"}:
         results = await run.cpu_bound(extract_tables)
         extract_button.enabled = True
         in_progress = False
-        ui.notify("Processing done. Downloading results...")
-        ui.download(create_results_zip(results), "results.zip")
+        if results:
+            ui.notify("Processing done. Downloading results...")
+            ui.download(create_results_zip(results), "results.zip")
+        else:
+            ui.notify("Nothing to process")
 
     def validate_page_range(value):
         value = value.replace(" ", "").strip()
         return bool(re.match(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", value))
+
+    def set_aws_credentials():
+        aws_config = textwrap.dedent(f"""\
+        [default]
+        region = {options.get("aws_region")}
+        output = json
+        """)
+        aws_credentials = textwrap.dedent(f"""\
+        [default]
+        aws_access_key_id = {options.get("aws_access_key_id")}
+        aws_secret_access_key = {options.get("aws_secret_access_key")}
+        """)
+
+        aws_dir = Path.home() / ".aws"
+        with open(aws_dir / "config", "w") as f_config:
+            f_config.write(aws_config)
+
+        with open(aws_dir / "credentials", "w") as f_credentials:
+            f_credentials.write(aws_credentials)
+
+        ui.notify("AWS credentials set correctly")
 
     @ui.page("/")
     def index():
@@ -134,7 +180,7 @@ if __name__ in {"__main__", "__mp_main__"}:
                         "pdf-text": "No OCR, use text in PDF",
                         "textract": "AWS Textract (commercial)",
                     },
-                    value="surya+paddle",
+                    value=options.get("method", "surya+paddle"),
                     on_change=lambda e: toggle_option(e, "method"),
                 ).classes("w-full")
 
@@ -161,7 +207,8 @@ if __name__ in {"__main__", "__mp_main__"}:
                     with aws_options_column:
                         ui.label("Configure access to AWS Textract")
                         ui.input(
-                            "AWS region", on_change=lambda e: toggle_option(e, "region")
+                            "AWS region",
+                            on_change=lambda e: toggle_option(e, "aws_region"),
                         ).classes("w-full")
                         ui.input(
                             "AWS Access Key Id",
@@ -173,10 +220,16 @@ if __name__ in {"__main__", "__mp_main__"}:
                                 e, "aws_secret_access_key"
                             ),
                         ).classes("w-full")
+                        ui.button(
+                            "Use these credentials", on_click=set_aws_credentials
+                        ).classes("w-full")
 
                 ui.checkbox(
                     "Try to fix image rotation (can be very slow for large inputs)",
                     on_change=lambda e: toggle_option(e, "unskew"),
+                    value=options.get("unskew", False),
+                ).bind_visibility_from(
+                    method_option, "value", lambda v: v != "pdf-text"
                 )
 
                 file_upload = (
@@ -191,6 +244,9 @@ if __name__ in {"__main__", "__mp_main__"}:
 
                 global uploaded_files_list
                 uploaded_files_list = ui.column()
+
+                for file in uploaded_files.values():
+                    add_to_uploaded_files_list(file["name"])
 
                 ui.button(
                     "Clear file list",
@@ -214,5 +270,11 @@ if __name__ in {"__main__", "__mp_main__"}:
                     if not queue.empty()
                     else None,
                 )
+                ui.timer(
+                    0.1,
+                    callback=lambda: ui.notify(exception_queue.get(), type="negative")
+                    if not exception_queue.empty()
+                    else None,
+                )
 
-    ui.run(native=False, reload=False)
+    ui.run(native=True, reload=False)

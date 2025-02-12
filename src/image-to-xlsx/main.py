@@ -31,17 +31,14 @@ def run(
         method,
     )
 
-    print("my pages", page_ranges)
     tot_pages = len(d.pages)
     page_nums = set()
     for start, end in page_ranges:
         page_nums |= set(range(start, min(tot_pages, end) + 1))
 
-    print("my pages", sorted(page_nums))
-
     pages = list(zip(d.pages, d.text_lines))
     for i in sorted(page_nums):
-        print(f"    page {i}")
+        print(f"    Processing page {i}")
         page, text_lines = pages[i - 1]
         p = Page(page, i, text_lines, d)
         p.process_page(
@@ -77,7 +74,6 @@ if __name__ == "__main__":
     from page import Page
 
     root_dir_path, relative_paths = get_document_paths(args.input_path)
-    print(root_dir_path, relative_paths)
 
     for relative_path in relative_paths:
         print(f"Processing document {relative_path}")
