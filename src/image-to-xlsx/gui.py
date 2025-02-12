@@ -277,4 +277,4 @@ if __name__ in {"__main__", "__mp_main__"}:
                     else None,
                 )
 
-    ui.run(native=True, reload=False)
+    ui.run(native=False, reload=False)
