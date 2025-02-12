@@ -17,7 +17,6 @@ if __name__ == "__main__":
     in_progress = False
     queue = manager.Queue()
 
-
     def set_page_ranges(event, file_name):
         if not validate_page_range(event.value):
             return
@@ -31,7 +30,6 @@ if __name__ == "__main__":
             page_ranges.append((int(start), int(end)))
 
         uploaded_files[file_name] = {**uploaded_files[file_name], "pages": page_ranges}
-
 
     def handle_upload(file):
         uploaded_files[file.name] = {
@@ -52,17 +50,14 @@ if __name__ == "__main__":
                         validation={"Wrong page range": validate_page_range},
                     )
 
-
     def reset_uploaded_files(file_upload):
         uploaded_files.clear()
         uploaded_files_list.clear()
         file_upload.reset()
         ui.notify("Removed all uploaded files")
 
-
     def toggle_option(event, option):
         options[option] = event.value
-
 
     def extract_tables():
         results = []
@@ -72,9 +67,14 @@ if __name__ == "__main__":
             table_workbook, footers_workbook = main.run(
                 file_content, page_ranges=file["pages"], **options
             )
-            
-        return results
+            results.append({
+                "table_workbook": table_workbook,
+                "footers_workbook": footers_workbook,
+                "name": file["name"],
+                "input_content": file_content,
+            })
 
+        return results
 
     def aws_config_present():
         aws_dir = Path.home() / ".aws"
@@ -82,13 +82,11 @@ if __name__ == "__main__":
         credentials_file = aws_dir / "credentials"
         return config_file.exists() and credentials_file.exists()
 
-
     def workbook_to_bytes(workbook):
         virtual_workbook = BytesIO()
         save_workbook(workbook, virtual_workbook)
         virtual_workbook.seek(0)
         return virtual_workbook.read()
-
 
     def create_results_zip(results):
         buffer = BytesIO()
@@ -109,7 +107,6 @@ if __name__ == "__main__":
         buffer.seek(0)
         return buffer.read()
 
-
     async def handle_extract_tables_click():
         global in_progress
         in_progress = True
@@ -120,11 +117,9 @@ if __name__ == "__main__":
         ui.notify("Processing done. Downloading results...")
         ui.download(create_results_zip(results), "results.zip")
 
-
     def validate_page_range(value):
         value = value.replace(" ", "").strip()
         return bool(re.match(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", value))
-
 
     @ui.page("/")
     def index():
@@ -142,13 +137,17 @@ if __name__ == "__main__":
 
                 with (
                     ui.column()
-                    .bind_visibility_from(method_option, "value", lambda v: v == "textract")
+                    .bind_visibility_from(
+                        method_option, "value", lambda v: v == "textract"
+                    )
                     .classes("w-full")
                 ):
                     edit_aws_credentials = ui.checkbox("Modify current AWS credentials")
 
                     if not aws_config_present():
-                        edit_aws_credentials = edit_aws_credentials.set_visibility(False)
+                        edit_aws_credentials = edit_aws_credentials.set_visibility(
+                            False
+                        )
 
                     aws_options_column = ui.card().classes("w-full")
                     if aws_config_present():
@@ -167,7 +166,9 @@ if __name__ == "__main__":
                         ).classes("w-full")
                         ui.input(
                             "AWS Secret Access key",
-                            on_change=lambda e: toggle_option(e, "aws_secret_access_key"),
+                            on_change=lambda e: toggle_option(
+                                e, "aws_secret_access_key"
+                            ),
                         ).classes("w-full")
 
                 ui.checkbox(
@@ -189,7 +190,8 @@ if __name__ == "__main__":
                 uploaded_files_list = ui.column()
 
                 ui.button(
-                    "Clear file list", on_click=lambda: reset_uploaded_files(file_upload)
+                    "Clear file list",
+                    on_click=lambda: reset_uploaded_files(file_upload),
                 ).classes("w-full")
 
                 global extract_button
@@ -211,3 +213,4 @@ if __name__ == "__main__":
                 )
 
     ui.run(native=False, reload=False)
+
