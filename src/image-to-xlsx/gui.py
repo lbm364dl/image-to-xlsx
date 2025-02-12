@@ -1,4 +1,4 @@
-if __name__ == "__main__":
+if __name__ in {"__main__", "__mp_main__"}:
     from nicegui import ui, run
     from pathlib import Path
     from definitions import INF
@@ -11,9 +11,13 @@ if __name__ == "__main__":
 
     print("starting code...")
 
-    options = {"method": "surya+paddle", "unskew": False, "show-detected-boxes": False}
     manager = Manager()
     uploaded_files = manager.dict()
+    options = manager.dict({
+        "method": "surya+paddle",
+        "unskew": False,
+        "show-detected-boxes": False,
+    })
     in_progress = False
     queue = manager.Queue()
 
@@ -34,7 +38,7 @@ if __name__ == "__main__":
     def handle_upload(file):
         uploaded_files[file.name] = {
             "name": file.name,
-            "content": file.content,
+            "content": file.content.read(),
             "pages": [(1, INF)],
         }
         ui.notify(f"Uploaded {file.name}")
@@ -63,15 +67,14 @@ if __name__ == "__main__":
         results = []
         for file in uploaded_files.values():
             queue.put_nowait(f"Processing file {file['name']}")
-            file_content = file["content"].read()
             table_workbook, footers_workbook = main.run(
-                file_content, page_ranges=file["pages"], **options
+                file["content"], page_ranges=file["pages"], **options
             )
             results.append({
                 "table_workbook": table_workbook,
                 "footers_workbook": footers_workbook,
                 "name": file["name"],
-                "input_content": file_content,
+                "input_content": file["content"],
             })
 
         return results
@@ -213,4 +216,3 @@ if __name__ == "__main__":
                 )
 
     ui.run(native=False, reload=False)
-
