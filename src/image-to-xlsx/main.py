@@ -20,7 +20,6 @@ def run(
     image_pad=100,
     fixed_decimal_places=0,
     extend_rows=0,
-    page_ranges=[(1, INF)],
     heuristic_thresh=0.6,
     textract_response_pickle_file=None,
     **kwargs,
@@ -31,16 +30,9 @@ def run(
         method,
     )
 
-    tot_pages = len(d.pages)
-    page_nums = set()
-    for start, end in page_ranges:
-        page_nums |= set(range(start, min(tot_pages, end) + 1))
-
-    pages = list(zip(d.pages, d.text_lines))
-    for i in sorted(page_nums):
+    for i, page in sorted(d.pages.items()):
         print(f"    Processing page {i}")
-        page, text_lines = pages[i - 1]
-        p = Page(page, i, text_lines, d)
+        p = Page(page, i, d)
         p.process_page(
             unskew=unskew,
             binarize=binarize,

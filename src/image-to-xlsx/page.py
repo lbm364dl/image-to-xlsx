@@ -19,12 +19,11 @@ class Page:
         self,
         page,
         page_num,
-        text_lines,
         document,
     ):
         self.page = page
         self.page_num = page_num
-        self.text_lines = text_lines
+        self.text_lines = None
         self.document = document
         self.model = None
         self.processor = None

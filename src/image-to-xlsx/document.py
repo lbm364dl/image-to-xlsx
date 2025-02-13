@@ -1,8 +1,12 @@
 import pymupdf
+import pypdfium2
 import tempfile
 from surya.input.load import load_from_file
 from surya.settings import settings
 from openpyxl import Workbook
+from utils import file_extension
+from PIL import Image
+from io import BytesIO
 
 
 class Document:
@@ -14,21 +18,15 @@ class Document:
     ):
         self.method = method
         self.fixed_decimal_places = fixed_decimal_places
+        self.extension = file_extension(document["name"])
+        self.tot_pages = 1
 
-        with tempfile.NamedTemporaryFile() as f:
-            f.write(document)
+        if self.extension == "pdf":
+            self.pdf = pymupdf.open("pdf", document["content"])
+            self.tot_pages = self.pdf.page_count
 
-            if method == "pdf-text":
-                self.pages = list(pymupdf.open(f.name).pages())
-                self.text_lines = [None] * len(self.pages)
-            else:
-                self.pages, _, self.text_lines = load_from_file(
-                    f.name, dpi=settings.IMAGE_DPI_HIGHRES, load_text_lines=True
-                )
-                self.text_lines = [
-                    (line if line and line["blocks"] else None)
-                    for line in self.text_lines
-                ]
+        self.set_page_nums(document["pages"])
+        self.load_pages(document["content"], method)
 
         self.workbook = Workbook()
         self.workbook.remove(self.workbook.active)
@@ -38,3 +36,22 @@ class Document:
             "table_number",
             "footer_text",
         ])
+
+    def set_page_nums(self, page_ranges):
+        self.page_nums = set()
+        for start, end in page_ranges:
+            self.page_nums |= set(range(start, min(self.tot_pages, end) + 1))
+
+    def load_pages(self, document, method):
+        if self.extension == "pdf":
+            if method == "pdf-text":
+                self.pages = {i: self.pdf.load_page(i) for i in self.page_nums}
+            else:
+                pdf = pypdfium2.PdfDocument(BytesIO(document))
+                self.pages = dict(zip(self.page_nums, pdf.render(
+                    pypdfium2.PdfBitmap.to_pil,
+                    page_indices=self.page_nums,
+                    scale=2,
+                )))
+        else:
+            self.pages = {1: Image.open(BytesIO(document))}

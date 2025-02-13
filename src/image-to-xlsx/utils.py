@@ -5,6 +5,8 @@ from pathlib import Path
 from PIL import Image
 from definitions import MAX_TEXTRACT_DIMENSION
 
+def file_extension(name):
+    return name.split(".")[-1]
 
 def save_workbook(workbook, where_to_save):
     try:
