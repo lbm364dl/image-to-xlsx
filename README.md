@@ -84,3 +84,9 @@ options:
                         Process document even if it was already processed before (i.e. it has its individual results directory already created). Default 0 (i.e. skip document)
 ```
 For example, you can run `python main.py path/to/input.pdf`.
+
+If you want to run the GUI, you will also need some system dependencies (only checked in Ubuntu) 
+```
+sudo apt-get install pkg-config cmake libcairo2-dev python3.10-dev libgirepository1.0-dev
+```
+Then again from `src/image-to-xlsx` you can now run `python -m gui.py`
