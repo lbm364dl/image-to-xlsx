@@ -23,9 +23,7 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
             exception_queue.put_nowait("Wrong AWS region. Try to fix credentials.")
             continue
         except (aws_exceptions.ClientError, aws_exceptions.NoCredentialsError):
-            exception_queue.put_nowait(
-                "Wrong AWS client credentials. Try to fix them."
-            )
+            exception_queue.put_nowait("Wrong AWS client credentials. Try to fix them.")
             continue
         except Exception:
             traceback.print_exc()
@@ -38,6 +36,7 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
 
 if __name__ == "__main__":
     from multiprocessing import freeze_support
+
     freeze_support()
     from nicegui import ui, run
     from pathlib import Path
@@ -55,13 +54,13 @@ if __name__ == "__main__":
         config_file = aws_dir / "config"
         credentials_file = aws_dir / "credentials"
         return config_file.exists() and credentials_file.exists()
-    
+
     def workbook_to_bytes(workbook):
         virtual_workbook = BytesIO()
         save_workbook(workbook, virtual_workbook)
         virtual_workbook.seek(0)
         return virtual_workbook.read()
-    
+
     def create_results_zip(results):
         buffer = BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -80,12 +79,14 @@ if __name__ == "__main__":
                 )
         buffer.seek(0)
         return buffer.read()
-    
+
     async def handle_extract_tables_click():
         global in_progress
         in_progress = True
         extract_button.enabled = False
-        results = await run.cpu_bound(extract_tables, uploaded_files, exception_queue, queue, options)
+        results = await run.cpu_bound(
+            extract_tables, uploaded_files, exception_queue, queue, options
+        )
         extract_button.enabled = True
         in_progress = False
         if results:
@@ -93,11 +94,11 @@ if __name__ == "__main__":
             ui.download(create_results_zip(results), "results.zip")
         else:
             ui.notify("Nothing to process")
-    
+
     def validate_page_range(value):
         value = value.replace(" ", "").strip()
         return bool(re.match(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", value))
-    
+
     def set_aws_credentials():
         aws_config = textwrap.dedent(f"""\
         [default]
@@ -109,16 +110,16 @@ if __name__ == "__main__":
         aws_access_key_id = {options.get("aws_access_key_id")}
         aws_secret_access_key = {options.get("aws_secret_access_key")}
         """)
-    
+
         aws_dir = Path.home() / ".aws"
         with open(aws_dir / "config", "w") as f_config:
             f_config.write(aws_config)
-    
+
         with open(aws_dir / "credentials", "w") as f_credentials:
             f_credentials.write(aws_credentials)
-    
+
         ui.notify("AWS credentials set correctly")
-    
+
     @ui.page("/")
     async def index():
         with ui.column().classes("w-full h-full items-center justify-center"):
@@ -132,7 +133,7 @@ if __name__ == "__main__":
                     value=options.get("method", "surya+paddle"),
                     on_change=lambda e: toggle_option(e, "method"),
                 ).classes("w-full")
-    
+
                 with (
                     ui.column()
                     .bind_visibility_from(
@@ -141,18 +142,18 @@ if __name__ == "__main__":
                     .classes("w-full")
                 ):
                     edit_aws_credentials = ui.checkbox("Modify current AWS credentials")
-    
+
                     if not aws_config_present():
                         edit_aws_credentials = edit_aws_credentials.set_visibility(
                             False
                         )
-    
+
                     aws_options_column = ui.card().classes("w-full")
                     if aws_config_present():
                         aws_options_column = aws_options_column.bind_visibility_from(
                             edit_aws_credentials, "value"
                         )
-    
+
                     with aws_options_column:
                         ui.label("Configure access to AWS Textract")
                         ui.input(
@@ -172,7 +173,7 @@ if __name__ == "__main__":
                         ui.button(
                             "Use these credentials", on_click=set_aws_credentials
                         ).classes("w-full")
-    
+
                 ui.checkbox(
                     "Try to fix image rotation (can be very slow for large inputs)",
                     on_change=lambda e: toggle_option(e, "unskew"),
@@ -180,7 +181,7 @@ if __name__ == "__main__":
                 ).bind_visibility_from(
                     method_option, "value", lambda v: v != "pdf-text"
                 )
-    
+
                 file_upload = (
                     ui.upload(
                         label="First add files and then upload them with the upside arrow in the right",
@@ -190,18 +191,18 @@ if __name__ == "__main__":
                     .props('accept="image/*,application/pdf"')
                     .classes("w-full")
                 )
-    
+
                 global uploaded_files_list
                 uploaded_files_list = ui.column()
-    
+
                 for file in uploaded_files.values():
                     add_to_uploaded_files_list(file["name"])
-    
+
                 ui.button(
                     "Clear file list",
                     on_click=lambda: reset_uploaded_files(file_upload),
                 ).classes("w-full")
-    
+
                 global extract_button
                 extract_button = ui.button(
                     "Extract tables", on_click=handle_extract_tables_click
@@ -212,7 +213,7 @@ if __name__ == "__main__":
                     in_progress_label = ui.label("").bind_visibility_from(
                         globals(), "in_progress"
                     )
-    
+
                 ui.timer(
                     0.1,
                     callback=lambda: in_progress_label.set_text(queue.get())
@@ -271,7 +272,7 @@ if __name__ == "__main__":
     def toggle_option(event, option):
         options[option] = event.value
 
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     manager = Manager()
     uploaded_files = manager.dict()

@@ -1,8 +1,5 @@
 import pymupdf
 import pypdfium2
-import tempfile
-from surya.input.load import load_from_file
-from surya.settings import settings
 from openpyxl import Workbook
 from utils import file_extension
 from PIL import Image
@@ -45,13 +42,18 @@ class Document:
     def load_pages(self, document, method):
         if self.extension == "pdf":
             if method == "pdf-text":
-                self.pages = {i: self.pdf.load_page(i) for i in self.page_nums}
+                self.pages = {i: self.pdf.load_page(i - 1) for i in self.page_nums}
             else:
                 pdf = pypdfium2.PdfDocument(BytesIO(document))
-                self.pages = dict(zip(self.page_nums, pdf.render(
-                    pypdfium2.PdfBitmap.to_pil,
-                    page_indices=self.page_nums,
-                    scale=2,
-                )))
+                self.pages = dict(
+                    zip(
+                        self.page_nums,
+                        pdf.render(
+                            pypdfium2.PdfBitmap.to_pil,
+                            page_indices=[i - 1 for i in self.page_nums],
+                            scale=2,
+                        ),
+                    )
+                )
         else:
             self.pages = {1: Image.open(BytesIO(document))}
