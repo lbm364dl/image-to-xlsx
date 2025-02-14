@@ -10,12 +10,14 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
             table_workbook, footers_workbook = main.run(
                 file, page_ranges=file["pages"], **options
             )
-            results.append({
-                "table_workbook": table_workbook,
-                "footers_workbook": footers_workbook,
-                "name": file["name"],
-                "input_content": file["content"],
-            })
+            results.append(
+                {
+                    "table_workbook": table_workbook,
+                    "footers_workbook": footers_workbook,
+                    "name": file["name"],
+                    "input_content": file["content"],
+                }
+            )
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -100,18 +102,23 @@ if __name__ == "__main__":
         return bool(re.match(r"^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$", value))
 
     def set_aws_credentials():
-        aws_config = textwrap.dedent(f"""\
+        aws_config = textwrap.dedent(
+            f"""\
         [default]
         region = {options.get("aws_region")}
         output = json
-        """)
-        aws_credentials = textwrap.dedent(f"""\
+        """
+        )
+        aws_credentials = textwrap.dedent(
+            f"""\
         [default]
         aws_access_key_id = {options.get("aws_access_key_id")}
         aws_secret_access_key = {options.get("aws_secret_access_key")}
-        """)
+        """
+        )
 
         aws_dir = Path.home() / ".aws"
+        aws_dir.mkdir(parents=True, exist_ok=True)
         with open(aws_dir / "config", "w") as f_config:
             f_config.write(aws_config)
 
@@ -120,112 +127,109 @@ if __name__ == "__main__":
 
         ui.notify("AWS credentials set correctly")
 
-    @ui.page("/")
-    async def index():
-        with ui.column().classes("w-full h-full items-center justify-center"):
-            with ui.card().classes("p-8 shadow-lg rounded-xl"):
-                method_option = ui.select(
-                    {
-                        "surya+paddle": "Surya and Paddle OCR (free open source)",
-                        "pdf-text": "No OCR, use text in PDF",
-                        "textract": "AWS Textract (commercial)",
-                    },
-                    value=options.get("method", "surya+paddle"),
-                    on_change=lambda e: toggle_option(e, "method"),
+    def aws_credentials_card(method_option):
+        with (
+            ui.column()
+            .bind_visibility_from(method_option, "value", lambda v: v == "textract")
+            .classes("w-full")
+        ):
+            edit_aws_credentials = ui.checkbox("Modify current AWS credentials")
+
+            if not aws_config_present():
+                edit_aws_credentials = edit_aws_credentials.set_visibility(False)
+
+            aws_options_column = ui.card().classes("w-full")
+            if aws_config_present():
+                aws_options_column = aws_options_column.bind_visibility_from(
+                    edit_aws_credentials, "value"
+                )
+
+            with aws_options_column:
+                ui.label("Configure access to AWS Textract")
+                ui.input(
+                    "AWS region",
+                    on_change=lambda e: toggle_option(e, "aws_region"),
                 ).classes("w-full")
-
-                with (
-                    ui.column()
-                    .bind_visibility_from(
-                        method_option, "value", lambda v: v == "textract"
-                    )
-                    .classes("w-full")
-                ):
-                    edit_aws_credentials = ui.checkbox("Modify current AWS credentials")
-
-                    if not aws_config_present():
-                        edit_aws_credentials = edit_aws_credentials.set_visibility(
-                            False
-                        )
-
-                    aws_options_column = ui.card().classes("w-full")
-                    if aws_config_present():
-                        aws_options_column = aws_options_column.bind_visibility_from(
-                            edit_aws_credentials, "value"
-                        )
-
-                    with aws_options_column:
-                        ui.label("Configure access to AWS Textract")
-                        ui.input(
-                            "AWS region",
-                            on_change=lambda e: toggle_option(e, "aws_region"),
-                        ).classes("w-full")
-                        ui.input(
-                            "AWS Access Key Id",
-                            on_change=lambda e: toggle_option(e, "aws_access_key_id"),
-                        ).classes("w-full")
-                        ui.input(
-                            "AWS Secret Access key",
-                            on_change=lambda e: toggle_option(
-                                e, "aws_secret_access_key"
-                            ),
-                        ).classes("w-full")
-                        ui.button(
-                            "Use these credentials", on_click=set_aws_credentials
-                        ).classes("w-full")
-
-                ui.checkbox(
-                    "Try to fix image rotation (can be very slow for large inputs)",
-                    on_change=lambda e: toggle_option(e, "unskew"),
-                    value=options.get("unskew", False),
-                ).bind_visibility_from(
-                    method_option, "value", lambda v: v != "pdf-text"
-                )
-
-                file_upload = (
-                    ui.upload(
-                        label="First add files and then upload them with the upside arrow in the right",
-                        multiple=True,
-                        on_upload=handle_upload,
-                    )
-                    .props('accept="image/*,application/pdf"')
-                    .classes("w-full")
-                )
-
-                global uploaded_files_list
-                uploaded_files_list = ui.column()
-
-                for file in uploaded_files.values():
-                    add_to_uploaded_files_list(file["name"])
-
+                ui.input(
+                    "AWS Access Key Id",
+                    on_change=lambda e: toggle_option(e, "aws_access_key_id"),
+                ).classes("w-full")
+                ui.input(
+                    "AWS Secret Access key",
+                    on_change=lambda e: toggle_option(e, "aws_secret_access_key"),
+                ).classes("w-full")
                 ui.button(
-                    "Clear file list",
-                    on_click=lambda: reset_uploaded_files(file_upload),
+                    "Use these credentials", on_click=set_aws_credentials
                 ).classes("w-full")
 
-                global extract_button
-                extract_button = ui.button(
-                    "Extract tables", on_click=handle_extract_tables_click
-                ).classes("w-full")
-                with ui.row(align_items="center").classes("w-full justify-center"):
-                    ui.spinner(size="lg").bind_visibility_from(globals(), "in_progress")
-                    global in_progress_label
-                    in_progress_label = ui.label("").bind_visibility_from(
-                        globals(), "in_progress"
-                    )
+    def method_selector():
+        return ui.select(
+            {
+                "surya+paddle": "Surya and Paddle OCR (free open source)",
+                "pdf-text": "No OCR, use text in PDF",
+                "textract": "AWS Textract (commercial)",
+            },
+            value=options.get("method", "surya+paddle"),
+            on_change=lambda e: toggle_option(e, "method"),
+        ).classes("w-full")
 
-                ui.timer(
-                    0.1,
-                    callback=lambda: in_progress_label.set_text(queue.get())
-                    if not queue.empty()
-                    else None,
-                )
-                ui.timer(
-                    0.1,
-                    callback=lambda: ui.notify(exception_queue.get(), type="negative")
-                    if not exception_queue.empty()
-                    else None,
-                )
+    def option_checkboxes(method_option):
+        ui.checkbox(
+            "Try to fix image rotation (can be very slow for large inputs)",
+            on_change=lambda e: toggle_option(e, "unskew"),
+            value=options.get("unskew", False),
+        ).bind_visibility_from(method_option, "value", lambda v: v != "pdf-text")
+
+    def file_upload_input():
+        return (
+            ui.upload(
+                label="First add files and then upload them with the upside arrow in the right",
+                multiple=True,
+                on_upload=handle_upload,
+            )
+            .props('accept="image/*,application/pdf"')
+            .classes("w-full")
+        )
+
+    def uploaded_files_view(file_upload):
+        global uploaded_files_list
+        uploaded_files_list = ui.column()
+
+        for file in uploaded_files.values():
+            add_to_uploaded_files_list(file["name"])
+
+        ui.button(
+            "Clear file list",
+            on_click=lambda: reset_uploaded_files(file_upload),
+        ).classes("w-full")
+
+    def extract_tables_button():
+        global extract_button
+        extract_button = ui.button(
+            "Extract tables", on_click=handle_extract_tables_click
+        ).classes("w-full")
+        with ui.row(align_items="center").classes("w-full justify-center"):
+            ui.spinner(size="lg").bind_visibility_from(globals(), "in_progress")
+            global in_progress_label
+            in_progress_label = ui.label("Initializing...").bind_visibility_from(
+                globals(), "in_progress"
+            )
+
+    def set_timers():
+        ui.timer(
+            0.1,
+            callback=lambda: (
+                in_progress_label.set_text(queue.get()) if not queue.empty() else None
+            ),
+        )
+        ui.timer(
+            0.1,
+            callback=lambda: (
+                ui.notify(exception_queue.get(), type="negative")
+                if not exception_queue.empty()
+                else None
+            ),
+        )
 
     def set_page_ranges(event, file_name):
         if not validate_page_range(event.value):
@@ -272,15 +276,27 @@ if __name__ == "__main__":
     def toggle_option(event, option):
         options[option] = event.value
 
-    # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    @ui.page("/")
+    async def index():
+        with ui.column().classes("w-full h-full items-center justify-center"):
+            with ui.card().classes("p-8 shadow-lg rounded-xl"):
+                method_option = method_selector()
+                aws_credentials_card(method_option)
+                option_checkboxes(method_option)
+                file_upload = file_upload_input()
+                uploaded_files_view(file_upload)
+                extract_tables_button()
+                set_timers()
 
     manager = Manager()
     uploaded_files = manager.dict()
-    options = manager.dict({
-        "method": "surya+paddle",
-        "unskew": False,
-        "show-detected-boxes": False,
-    })
+    options = manager.dict(
+        {
+            "method": "surya+paddle",
+            "unskew": False,
+            "show-detected-boxes": False,
+        }
+    )
 
     in_progress = False
     queue = manager.Queue()
