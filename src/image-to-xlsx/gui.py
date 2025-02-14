@@ -1,3 +1,6 @@
+MAX_WIDTH = 650
+
+
 def extract_tables(uploaded_files, exception_queue, queue, options):
     import botocore.exceptions as aws_exceptions
     import traceback
@@ -10,14 +13,12 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
             table_workbook, footers_workbook = main.run(
                 file, page_ranges=file["pages"], **options
             )
-            results.append(
-                {
-                    "table_workbook": table_workbook,
-                    "footers_workbook": footers_workbook,
-                    "name": file["name"],
-                    "input_content": file["content"],
-                }
-            )
+            results.append({
+                "table_workbook": table_workbook,
+                "footers_workbook": footers_workbook,
+                "name": file["name"],
+                "input_content": file["content"],
+            })
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -165,11 +166,12 @@ if __name__ == "__main__":
     def method_selector():
         return ui.select(
             {
+                "textract": "AWS Textract (commercial)",
                 "surya+paddle": "Surya and Paddle OCR (free open source)",
                 "pdf-text": "No OCR, use text in PDF",
-                "textract": "AWS Textract (commercial)",
             },
-            value=options.get("method", "surya+paddle"),
+            label="Extraction method",
+            value=options.get("method", "textract"),
             on_change=lambda e: toggle_option(e, "method"),
         ).classes("w-full")
 
@@ -181,9 +183,12 @@ if __name__ == "__main__":
         ).bind_visibility_from(method_option, "value", lambda v: v != "pdf-text")
 
     def file_upload_input():
+        ui.label(
+            "Add files you want to process. Only PDFs and images are accepted. For images, at least PNG and JPEG should be valid. After uploading the files, you can select page ranges to process in each PDF or leave blank for all pages."
+        ).classes(f"w-[{MAX_WIDTH}px]")
         return (
             ui.upload(
-                label="First add files and then upload them with the upside arrow in the right",
+                label="First add files and then upload them with the upside arrow in the right.",
                 multiple=True,
                 on_upload=handle_upload,
             )
@@ -196,7 +201,8 @@ if __name__ == "__main__":
         uploaded_files_list = ui.column()
 
         for file in uploaded_files.values():
-            add_to_uploaded_files_list(file["name"])
+            if file["type"] == "application/pdf":
+                add_to_uploaded_files_list(file["name"])
 
         ui.button(
             "Clear file list",
@@ -204,6 +210,9 @@ if __name__ == "__main__":
         ).classes("w-full")
 
     def extract_tables_button():
+        ui.label(
+            "A zip file with the results will be downloaded, containing one folder for each input file. The output Excels will contain one sheet for each table detected in the file."
+        ).classes(f"w-[{MAX_WIDTH}px]")
         global extract_button
         extract_button = ui.button(
             "Extract tables", on_click=handle_extract_tables_click
@@ -261,6 +270,7 @@ if __name__ == "__main__":
             "name": file.name,
             "content": file.content.read(),
             "pages": [(1, INF)],
+            "type": file.type,
         }
         ui.notify(f"Uploaded {file.name}")
 
@@ -276,10 +286,31 @@ if __name__ == "__main__":
     def toggle_option(event, option):
         options[option] = event.value
 
+    def page_header():
+        ui.label("Table extraction tool").classes("text-[24px]")
+        ui.label("Extract data tables from PDFs/images to Excel sheets").classes(
+            "text-[16px]"
+        )
+
+    def methods_explanation():
+        ui.label("Methods:")
+        with ui.list().classes(f"w-[{MAX_WIDTH}px]").props("separator"):
+            ui.item(
+                "AWS Textract: uses paid Amazon Web Services tool Textract for table recognition. Most reliable option but requires AWS credentials."
+            )
+            ui.item(
+                "Surya and Paddle OCR: uses free open source AI models for table recognition. More experimental and slower. The first time it takes even longer because it has to download the models."
+            )
+            ui.item(
+                "PDF text: does not rely on AI models and instead uses information stored in the PDF. Only use if your PDF has embedded text, that is, if you can select and copy the contents of the table."
+            )
+
     @ui.page("/")
     async def index():
         with ui.column().classes("w-full h-full items-center justify-center"):
             with ui.card().classes("p-8 shadow-lg rounded-xl"):
+                page_header()
+                methods_explanation()
                 method_option = method_selector()
                 aws_credentials_card(method_option)
                 option_checkboxes(method_option)
@@ -290,13 +321,11 @@ if __name__ == "__main__":
 
     manager = Manager()
     uploaded_files = manager.dict()
-    options = manager.dict(
-        {
-            "method": "surya+paddle",
-            "unskew": False,
-            "show-detected-boxes": False,
-        }
-    )
+    options = manager.dict({
+        "method": "textract",
+        "unskew": False,
+        "show-detected-boxes": False,
+    })
 
     in_progress = False
     queue = manager.Queue()
