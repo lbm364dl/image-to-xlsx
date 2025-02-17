@@ -1,12 +1,15 @@
 import os
 import glob
 import re
+import configparser
 from pathlib import Path
 from PIL import Image
 from definitions import MAX_TEXTRACT_DIMENSION
 
+
 def file_extension(name):
     return name.split(".")[-1]
+
 
 def save_workbook(workbook, where_to_save):
     try:
@@ -102,3 +105,19 @@ def maybe_reduce_resolution(img):
         img = img.resize(new_size, Image.LANCZOS)
 
     return img
+
+
+def _read_aws_credentials(file):
+    config: configparser.ConfigParser = configparser.ConfigParser()
+    config.read(Path.home() / ".aws" / file)
+    return config
+
+
+def get_aws_credentials():
+    conf = _read_aws_credentials("config")
+    credentials = _read_aws_credentials("credentials")
+    return {
+        "region_name": conf.get("default", "region"),
+        "aws_access_key_id": credentials.get("default", "aws_access_key_id"),
+        "aws_secret_access_key": credentials.get("default", "aws_secret_access_key"),
+    }
