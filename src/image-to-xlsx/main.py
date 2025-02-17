@@ -22,6 +22,9 @@ def run(
     extend_rows=0,
     heuristic_thresh=0.6,
     textract_response_pickle_file=None,
+    remove_dots_and_commas=0,
+    decimal_separator=".",
+    thousands_separator=",",
     **kwargs,
 ):
     d = Document(
@@ -45,6 +48,9 @@ def run(
             image_pad=image_pad,
             heuristic_thresh=heuristic_thresh,
             textract_response_pickle_file=textract_response_pickle_file,
+            remove_dots_and_commas=remove_dots_and_commas,
+            decimal_separator=decimal_separator,
+            thousands_separator=thousands_separator,
         )
 
     return d.workbook, d.footers_workbook

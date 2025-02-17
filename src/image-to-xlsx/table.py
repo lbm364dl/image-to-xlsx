@@ -101,7 +101,9 @@ class Table:
 
         return cropped_imgs
 
-    def recognize_texts(self, image_pad, compute_prefix, show_cropped_bboxes):
+    def recognize_texts(
+        self, image_pad, compute_prefix, show_cropped_bboxes, remove_dots_and_commas
+    ):
         self.table_data = defaultdict(lambda: defaultdict(list))
 
         if self.text_lines:
@@ -110,7 +112,7 @@ class Table:
                 row_id, col_id = row_ids[0], col_ids[0]
                 add_text = cell.text
                 add_text = self.maybe_clean_numeric_cell(
-                    ILLEGAL_CHARACTERS_RE.sub(r"", add_text)
+                    ILLEGAL_CHARACTERS_RE.sub(r"", add_text), remove_dots_and_commas
                 )
                 if add_text:
                     self.table_data[row_id][col_id].append({
@@ -204,8 +206,8 @@ class Table:
                     if col["footnotes"]:
                         cell.comment = Comment(",".join(col["footnotes"]), "automatic")
 
-    def maybe_clean_numeric_cell(self, text):
-        if self.is_numeric_cell(text):
+    def maybe_clean_numeric_cell(self, text, remove_dots_and_commas):
+        if remove_dots_and_commas and self.is_numeric_cell(text):
             text = text.replace(".", "").replace(",", "")
             fixed_decimal_places = self.page.document.fixed_decimal_places
             if text and fixed_decimal_places > 0:
@@ -249,9 +251,9 @@ class Table:
             "confidence": confidence if not np.isnan(confidence) else None,
         }
 
-    def clean_cell_text(self, cell_text):
+    def clean_cell_text(self, cell_text, remove_dots_and_commas):
         cell_text = ILLEGAL_CHARACTERS_RE.sub(r"", cell_text)
-        if self.is_numeric_cell(cell_text):
+        if remove_dots_and_commas and self.is_numeric_cell(cell_text):
             cell_text = cell_text.replace(".", "").replace(",", "")
             fixed_decimal_places = self.page.document.fixed_decimal_places
             if cell_text and fixed_decimal_places > 0:
@@ -270,7 +272,7 @@ class Table:
         )
         return [row for row in table_data if len("".join(row)) / mean_row_length > 0.1]
 
-    def as_clean_matrix(self):
+    def as_clean_matrix(self, remove_dots_and_commas):
         n = max([i + 1 for i in self.table_data.keys()], default=0)
         m = max(
             [j + 1 for cols in self.table_data.values() for j in cols.keys()], default=0
@@ -283,35 +285,47 @@ class Table:
         for row, cols in self.table_data.items():
             for col, cell in cols.items():
                 cell = self.join_cell_parts(cell)
-                cell["text"] = self.clean_cell_text(cell["text"])
+                cell["text"] = self.clean_cell_text(
+                    cell["text"], remove_dots_and_commas
+                )
                 cell["text"], cell["footnotes"] = split_footnotes(cell["text"])
                 table_data[row][col] = cell
 
         return table_data
 
-    def overwrite_seminumeric_cells_confidence(self, table_matrix):
+    def overwrite_seminumeric_cells_confidence(
+        self, table_matrix, decimal_separator, thousands_separator
+    ):
         for i, row in enumerate(table_matrix):
             for j, col in enumerate(row):
-                _, forced_numeric = self.maybe_parse_numeric_cell(col["text"])
+                _, forced_numeric = self.maybe_parse_numeric_cell(
+                    col["text"], decimal_separator, thousands_separator
+                )
                 # Override confidence so that someone has to review just in case
                 if forced_numeric:
                     table_matrix[i][j]["confidence"] = 0.0
 
         return table_matrix
 
-    def maybe_parse_numeric_cells(self, table_matrix):
+    def maybe_parse_numeric_cells(
+        self, table_matrix, decimal_separator, thousands_separator
+    ):
         for i, row in enumerate(table_matrix):
             for j, col in enumerate(row):
                 table_matrix[i][j]["text"], _ = self.maybe_parse_numeric_cell(
-                    col["text"]
+                    col["text"], decimal_separator, thousands_separator
                 )
 
         return table_matrix
 
-    def maybe_parse_numeric_cell(self, text):
+    def maybe_parse_numeric_cell(self, text, decimal_separator, thousands_separator):
         if self.is_numeric_cell(text):
+            text = text.replace(thousands_separator, "")
+            if decimal_separator == ",":
+                text = text.replace(decimal_separator, ".")
+
             try:
-                num = int(text)
+                num = float(text)
                 return num, False
             except ValueError:
                 only_numeric = re.sub(r"[^-0-9]", "", text)
@@ -332,13 +346,16 @@ class Table:
         compute_prefix=10**9,
         show_cropped_bboxes=False,
         show_detected_boxes=False,
+        remove_dots_and_commas=False,
     ):
         self.recognize_structure(heuristic_thresh)
 
         if show_detected_boxes:
             self.visualize_table_bboxes()
 
-        self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
+        self.recognize_texts(
+            image_pad, compute_prefix, show_cropped_bboxes, remove_dots_and_commas
+        )
         # self.table_data = self.remove_low_content_rows(table_data)
 
     def nlp_postprocess(

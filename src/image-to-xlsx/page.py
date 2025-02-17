@@ -85,8 +85,12 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            table_matrix = table.as_clean_matrix()
-            table_matrix = table.overwrite_seminumeric_cells_confidence(table_matrix)
+            table_matrix = table.as_clean_matrix(kwargs.get("remove_dots_and_commas"))
+            table_matrix = table.overwrite_seminumeric_cells_confidence(
+                table_matrix,
+                kwargs.get("decimal_separator"),
+                kwargs.get("thousands_separator"),
+            )
 
             if kwargs.get("nlp_postprocess"):
                 table_matrix = table.nlp_postprocess(
@@ -95,7 +99,11 @@ class Page:
                     kwargs.get("nlp_postprocess_prompt_file"),
                 )
 
-            table_matrix = table.maybe_parse_numeric_cells(table_matrix)
+            table_matrix = table.maybe_parse_numeric_cells(
+                table_matrix,
+                kwargs.get("decimal_separator"),
+                kwargs.get("thousands_separator"),
+            )
 
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
@@ -128,6 +136,7 @@ class Page:
                 compute_prefix=kwargs.get("compute_prefix"),
                 show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
                 show_detected_boxes=kwargs.get("show_detected_boxes"),
+                remove_dots_and_commas=kwargs.get("remove_dots_and_commas"),
             )
             tables.append(t)
 
