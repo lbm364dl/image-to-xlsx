@@ -79,7 +79,12 @@ if __name__ == "__main__":
 
         real_path = os.path.join(root_dir_path, relative_path)
         with open(real_path, "rb") as f:
-            table_workbook, footers_workbook = run(f.read(), **vars(args))
+            document = {
+                "name": str(relative_path),
+                "content": f.read(),
+                "pages": [(args.first_page, args.last_page)],
+            }
+            table_workbook, footers_workbook = run(document, **vars(args))
             save_output(
                 table_workbook, footers_workbook, output_dir, relative_path.stem
             )
