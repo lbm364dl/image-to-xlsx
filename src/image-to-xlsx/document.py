@@ -1,43 +1,30 @@
-import os
 import pymupdf
-import shutil
-from surya.input.load import load_from_file
-from surya.settings import settings
-from pathlib import Path
+import pypdfium2
 from openpyxl import Workbook
+from utils import file_extension
+from PIL import Image
+from io import BytesIO
 
 
 class Document:
     def __init__(
         self,
-        relative_path,
-        root_dir_path,
+        document,
         fixed_decimal_places=0,
         method="surya+paddle",
     ):
         self.method = method
-        real_path = os.path.join(root_dir_path, relative_path)
-        self.path = Path(real_path)
-
-        if method == "pdf-text":
-            self.pages = list(pymupdf.open(self.path).pages())
-            self.text_lines = [None] * len(self.pages)
-        else:
-            self.pages, _, self.text_lines = load_from_file(
-                real_path, dpi=settings.IMAGE_DPI_HIGHRES, load_text_lines=True
-            )
-            self.text_lines = [
-                (line if line and line["blocks"] else None) for line in self.text_lines
-            ]
-
         self.fixed_decimal_places = fixed_decimal_places
-        self.file_name = self.path.stem
-        self.extension = self.path.suffix
-        self.root_dir_path = Path(root_dir_path)
-        self.relative_path = Path(relative_path)
-        self.output_dir = (
-            self.root_dir_path / "results" / self.relative_path
-        ).parent / self.relative_path.stem
+        self.extension = file_extension(document["name"])
+        self.tot_pages = 1
+
+        if self.extension == "pdf":
+            self.pdf = pymupdf.open("pdf", document["content"])
+            self.tot_pages = self.pdf.page_count
+
+        self.set_page_nums(document["pages"])
+        self.load_pages(document["content"], method)
+
         self.workbook = Workbook()
         self.workbook.remove(self.workbook.active)
         self.footers_workbook = Workbook()
@@ -47,13 +34,26 @@ class Document:
             "footer_text",
         ])
 
-    def exists_output_dir(self):
-        return os.path.isdir(self.output_dir)
+    def set_page_nums(self, page_ranges):
+        self.page_nums = set()
+        for start, end in page_ranges:
+            self.page_nums |= set(range(start, min(self.tot_pages, end) + 1))
 
-    def save_output(self):
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        output_xlsx_path = self.output_dir / f"{self.relative_path.stem}.xlsx"
-        self.workbook.save(output_xlsx_path)
-        shutil.copy(self.path, self.output_dir)
-        footers_xlsx_path = self.output_dir / f"footers_{self.relative_path.stem}.xlsx"
-        self.footers_workbook.save(footers_xlsx_path)
+    def load_pages(self, document, method):
+        if self.extension == "pdf":
+            if method == "pdf-text":
+                self.pages = {i: self.pdf.load_page(i - 1) for i in self.page_nums}
+            else:
+                pdf = pypdfium2.PdfDocument(BytesIO(document))
+                self.pages = dict(
+                    zip(
+                        self.page_nums,
+                        pdf.render(
+                            pypdfium2.PdfBitmap.to_pil,
+                            page_indices=[i - 1 for i in self.page_nums],
+                            scale=2,
+                        ),
+                    )
+                )
+        else:
+            self.pages = {1: Image.open(BytesIO(document))}

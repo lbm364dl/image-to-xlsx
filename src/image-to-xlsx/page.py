@@ -11,7 +11,7 @@ from binarization import binarize
 from PIL import Image
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
-from utils import maybe_reduce_resolution
+from utils import maybe_reduce_resolution, get_aws_credentials
 
 
 class Page:
@@ -19,12 +19,11 @@ class Page:
         self,
         page,
         page_num,
-        text_lines,
         document,
     ):
         self.page = page
         self.page_num = page_num
-        self.text_lines = text_lines
+        self.text_lines = None
         self.document = document
         self.model = None
         self.processor = None
@@ -175,7 +174,7 @@ class Page:
 
     def get_textract_response(self):
         self.page = maybe_reduce_resolution(self.page)
-        textract = boto3.client("textract")
+        textract = boto3.client("textract", **get_aws_credentials())
         img_byte_arr = io.BytesIO()
         self.page.save(img_byte_arr, format="PNG")
         img_byte_arr = img_byte_arr.getvalue()
@@ -191,8 +190,7 @@ class Page:
             # Upload the document to S3
             bucket_name = "test-textract-large-files"
             file_name = "tmp_extract_page"
-            s3 = boto3.client("s3")
-            # s3.upload_file(file_name, bucket_name, file_name)
+            s3 = boto3.client("s3", **get_aws_credentials())
             s3.put_object(Bucket=bucket_name, Key=file_name, Body=img_byte_arr)
 
             # Call Textract to analyze the document
