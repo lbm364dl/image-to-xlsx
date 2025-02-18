@@ -130,7 +130,7 @@ class Table:
                 row_id, col_id = row_ids[0], col_ids[0]
 
                 self.table_data[row_id][col_id] += [
-                    {"text": text, "confidence": confidence}
+                    {"text": text, "confidence": confidence*100}
                     for text, confidence in zip(pred["rec_text"], pred["rec_score"])
                 ]
 
