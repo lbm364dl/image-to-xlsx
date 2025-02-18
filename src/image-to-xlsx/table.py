@@ -186,6 +186,12 @@ class Table:
             top=Side(style="thin", color="FFFFFF"),
             bottom=Side(style="thin", color="FFFFFF"),
         )
+        thick_blue_border = Border(
+            left=Side(style="thick", color="0000FF"),
+            right=Side(style="thick", color="0000FF"),
+            top=Side(style="thick", color="0000FF"),
+            bottom=Side(style="thick", color="0000FF"),
+        )
 
         self.page.document.footers_workbook.active.append([
             page_num,
@@ -202,7 +208,11 @@ class Table:
                 cell_color = get_cell_color(col["confidence"])
                 if cell_color:
                     cell.fill = PatternFill(start_color=cell_color, fill_type="solid")
-                    cell.border = thin_white_border
+                    cell.border = (
+                        thin_white_border
+                        if not col["forced_numeric"]
+                        else thick_blue_border
+                    )
                     if col["footnotes"]:
                         cell.comment = Comment(",".join(col["footnotes"]), "automatic")
 
@@ -278,7 +288,15 @@ class Table:
             [j + 1 for cols in self.table_data.values() for j in cols.keys()], default=0
         )
         table_data = [
-            [{"text": "", "confidence": None, "footnotes": []} for _ in range(m)]
+            [
+                {
+                    "text": "",
+                    "confidence": None,
+                    "footnotes": [],
+                    "forced_numeric": False,
+                }
+                for _ in range(m)
+            ]
             for _ in range(n)
         ]
 
@@ -289,7 +307,7 @@ class Table:
                     cell["text"], remove_dots_and_commas
                 )
                 cell["text"], cell["footnotes"] = split_footnotes(cell["text"])
-                table_data[row][col] = cell
+                table_data[row][col] = {**cell, "forced_numeric": False}
 
         return table_data
 
@@ -301,9 +319,8 @@ class Table:
                 _, forced_numeric = self.maybe_parse_numeric_cell(
                     col["text"], decimal_separator, thousands_separator
                 )
-                # Override confidence so that someone has to review just in case
-                if forced_numeric:
-                    table_matrix[i][j]["confidence"] = 0.0
+                # If true, will add a thick border to the cell for review
+                table_matrix[i][j]["forced_numeric"] = forced_numeric
 
         return table_matrix
 
@@ -328,10 +345,10 @@ class Table:
                 num = float(text)
                 return num, False
             except ValueError:
-                only_numeric = re.sub(r"[^-0-9]", "", text)
+                only_numeric = re.sub(r"[^-.0-9]", "", text)
                 if only_numeric:
                     try:
-                        return int(only_numeric), True
+                        return float(only_numeric), True
                     except ValueError:
                         return only_numeric, False
                 else:
