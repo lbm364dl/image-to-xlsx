@@ -232,13 +232,6 @@ class Table:
         cell_text = ILLEGAL_CHARACTERS_RE.sub(r"", cell_text)
         if remove_dots_and_commas and self.is_numeric_cell(cell_text):
             cell_text = cell_text.replace(".", "").replace(",", "")
-            fixed_decimal_places = self.page.document.fixed_decimal_places
-            if cell_text and fixed_decimal_places > 0:
-                cell_text = (
-                    cell_text[:-fixed_decimal_places]
-                    + "."
-                    + cell_text[-fixed_decimal_places:]
-                )
 
         return cell_text
 
@@ -302,6 +295,10 @@ class Table:
 
         return table_matrix
 
+    def cell_to_float(self, value):
+        precision = self.page.document.fixed_decimal_places
+        return float(value) / 10**precision
+
     def maybe_parse_numeric_cell(self, text, decimal_separator, thousands_separator):
         if self.is_numeric_cell(text):
             text = text.replace(thousands_separator, "")
@@ -309,13 +306,12 @@ class Table:
                 text = text.replace(decimal_separator, ".")
 
             try:
-                num = float(text)
-                return num, False
+                return self.cell_to_float(text), False
             except ValueError:
                 only_numeric = re.sub(r"[^-.0-9]", "", text)
                 if only_numeric:
                     try:
-                        return float(only_numeric), True
+                        return self.cell_to_float(only_numeric), True
                     except ValueError:
                         return only_numeric, False
                 else:
