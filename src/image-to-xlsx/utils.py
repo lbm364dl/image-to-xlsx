@@ -117,7 +117,7 @@ def get_aws_credentials():
     conf = _read_aws_credentials("config")
     credentials = _read_aws_credentials("credentials")
     return {
-        "region_name": conf.get("default", "region"),
-        "aws_access_key_id": credentials.get("default", "aws_access_key_id"),
-        "aws_secret_access_key": credentials.get("default", "aws_secret_access_key"),
+        "region_name": conf.get("default", "region", fallback=None),
+        "aws_access_key_id": credentials.get("default", "aws_access_key_id", fallback=None),
+        "aws_secret_access_key": credentials.get("default", "aws_secret_access_key", fallback=None),
     }
