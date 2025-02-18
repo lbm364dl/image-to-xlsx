@@ -10,6 +10,7 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
     for file in uploaded_files.values():
         queue.put_nowait(f"Processing file {file['name']}")
         try:
+            options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
             table_workbook, footers_workbook = main.run(
                 file, page_ranges=file["pages"], **options
             )
@@ -47,7 +48,6 @@ if __name__ == "__main__":
     from multiprocessing import Manager
     from io import BytesIO
     from utils import save_workbook
-    import asyncio
     import re
     import zipfile
     import textwrap
@@ -176,11 +176,66 @@ if __name__ == "__main__":
         ).classes("w-full")
 
     def option_checkboxes(method_option):
-        ui.checkbox(
-            "Try to fix image rotation (can be very slow for large inputs)",
-            on_change=lambda e: toggle_option(e, "unskew"),
-            value=options.get("unskew", False),
-        ).bind_visibility_from(method_option, "value", lambda v: v != "pdf-text")
+        with ui.column().classes(f"w-[{MAX_WIDTH}px]"):
+            ui.label("Other options")
+
+            ui.checkbox(
+                "Try to fix image rotation (can be very slow for large inputs)",
+                on_change=lambda e: toggle_option(e, "unskew"),
+                value=options.get("unskew", False),
+            ).bind_visibility_from(method_option, "value", lambda v: v != "pdf-text")
+
+            ui.checkbox(
+                "Create one row for each text detected inside a cell instead of joining with a space. Only try this if you see that adjacent rows are mixed into a single row by mistake.",
+                on_change=lambda e: toggle_option(e, "extend_rows"),
+                value=options.get("extend_rows", False),
+            )
+            remove_dots_and_commas = ui.checkbox(
+                "Remove all commas and dots from numeric cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
+                on_change=lambda e: toggle_option(e, "remove_dots_and_commas"),
+                value=options.get("remove_dots_and_commas", False),
+            )
+            with ui.row(align_items="center").bind_visibility_from(
+                remove_dots_and_commas, "value"
+            ):
+                ui.number(
+                    "Decimal places",
+                    placeholder="0",
+                    on_change=lambda e: toggle_option(e, "fixed_decimal_places"),
+                    precision=0,
+                    min=0,
+                )
+                ui.label(
+                    "Forcefully write a decimal point this number of places to the left of the last digit in numeric cells. "
+                ).classes("w-1/2")
+
+            with ui.column().bind_visibility_from(
+                remove_dots_and_commas, "value", lambda v: not v
+            ):
+                with ui.row(align_items="center"):
+                    ui.select(
+                        {
+                            ",": "Comma (,)",
+                            ".": "Dot (.)",
+                        },
+                        value=options.get("thousands_separator", ","),
+                        on_change=lambda e: toggle_option(e, "thousands_separator"),
+                    ).classes("w-[20%]")
+                    ui.label(
+                        " Thousands separator (will be ignored when trying to convert numeric cells) "
+                    ).classes("w-[50%]")
+                with ui.row(align_items="center"):
+                    ui.select(
+                        {
+                            ".": "Dot (.)",
+                            ",": "Comma (,)",
+                        },
+                        value=options.get("decimal_separator", "."),
+                        on_change=lambda e: toggle_option(e, "decimal_separator"),
+                    ).classes("w-[20%]")
+                    ui.label(
+                        "Decimal separator (will be used as decimal point when trying to convert numeric cells)"
+                    ).classes("w-[50%]")
 
     def file_upload_input():
         ui.label(
@@ -325,6 +380,11 @@ if __name__ == "__main__":
         "method": "textract",
         "unskew": False,
         "show-detected-boxes": False,
+        "extend_rows": False,
+        "remove_dots_and_commas": False,
+        "fixed_decimal_places": 0,
+        "thousands_separator": ",",
+        "decimal_separator": ".",
     })
 
     in_progress = False

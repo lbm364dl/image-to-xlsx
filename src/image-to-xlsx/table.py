@@ -340,7 +340,6 @@ class Table:
         self.recognize_texts(
             image_pad, compute_prefix, show_cropped_bboxes, remove_dots_and_commas
         )
-        # self.table_data = self.remove_low_content_rows(table_data)
 
     def nlp_postprocess(
         self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
