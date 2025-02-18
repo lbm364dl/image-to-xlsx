@@ -23,7 +23,6 @@ class Page:
     ):
         self.page = page
         self.page_num = page_num
-        self.text_lines = None
         self.document = document
         self.model = None
         self.processor = None
@@ -120,7 +119,6 @@ class Page:
         for table in self.detect_tables():
             t = Table(
                 self.page,
-                self.text_lines,
                 self,
                 table.bbox,
                 self.model,
@@ -147,7 +145,6 @@ class Page:
         for table in self.page.find_tables(strategy="text").tables:
             t = Table(
                 self.page,
-                self.text_lines,
                 self,
                 table.bbox,
             )
@@ -225,7 +222,7 @@ class Page:
         tables = []
         for table in file_tables:
             bbox = self.get_textract_table_bbox(table)
-            t = Table(self.page, self.text_lines, self, bbox)
+            t = Table(self.page, self, bbox)
             t.set_table_from_textract_pickle(table, id_to_block)
             tables.append(t)
 

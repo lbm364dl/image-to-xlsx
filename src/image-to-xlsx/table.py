@@ -20,7 +20,6 @@ class Table:
     def __init__(
         self,
         whole_image,
-        text_lines,
         page,
         table_bbox,
         model=None,
@@ -33,7 +32,6 @@ class Table:
         self.footer_text = None
 
         if not page.document.method == "pdf-text":
-            self.text_lines = text_lines
             self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
             self.table_bbox = table_bbox
@@ -47,14 +45,7 @@ class Table:
         return [tb for tb in bboxes if tb.bbox[3] - tb.bbox[1] <= thresh]
 
     def recognize_structure(self, heuristic_thresh=0.8):
-        if self.text_lines:
-            [table_blocks] = (
-                get_table_blocks([self.table_bbox], self.text_lines, self.image.size)
-                if self.text_lines is not None
-                else []
-            )
-        else:
-            table_blocks = []
+        table_blocks = []
 
         [det_result] = batch_text_detection(
             [self.cropped_img], self.det_model, self.det_processor
@@ -106,33 +97,19 @@ class Table:
     ):
         self.table_data = defaultdict(lambda: defaultdict(list))
 
-        if self.text_lines:
-            for cell in self.table["cells"]:
-                row_ids, col_ids = cell.row_ids, cell.col_ids
-                row_id, col_id = row_ids[0], col_ids[0]
-                add_text = cell.text
-                add_text = self.maybe_clean_numeric_cell(
-                    ILLEGAL_CHARACTERS_RE.sub(r"", add_text), remove_dots_and_commas
-                )
-                if add_text:
-                    self.table_data[row_id][col_id].append({
-                        "text": add_text,
-                        "confidence": None,
-                    })
-        else:
-            cropped_imgs = self.get_cropped_cell_images(
-                image_pad, compute_prefix, show_cropped_bboxes
-            )
-            output = self.pipeline.predict(cropped_imgs)
+        cropped_imgs = self.get_cropped_cell_images(
+            image_pad, compute_prefix, show_cropped_bboxes
+        )
+        output = self.pipeline.predict(cropped_imgs)
 
-            for cell, pred in zip(self.table["cells"], output):
-                row_ids, col_ids = cell.row_ids, cell.col_ids
-                row_id, col_id = row_ids[0], col_ids[0]
+        for cell, pred in zip(self.table["cells"], output):
+            row_ids, col_ids = cell.row_ids, cell.col_ids
+            row_id, col_id = row_ids[0], col_ids[0]
 
-                self.table_data[row_id][col_id] += [
-                    {"text": text, "confidence": confidence*100}
-                    for text, confidence in zip(pred["rec_text"], pred["rec_score"])
-                ]
+            self.table_data[row_id][col_id] += [
+                {"text": text, "confidence": confidence * 100}
+                for text, confidence in zip(pred["rec_text"], pred["rec_score"])
+            ]
 
     def set_table_from_pdf_text(self, table):
         self.table_data = defaultdict(dict)
@@ -215,16 +192,6 @@ class Table:
                     )
                     if col["footnotes"]:
                         cell.comment = Comment(",".join(col["footnotes"]), "automatic")
-
-    def maybe_clean_numeric_cell(self, text, remove_dots_and_commas):
-        if remove_dots_and_commas and self.is_numeric_cell(text):
-            text = text.replace(".", "").replace(",", "")
-            fixed_decimal_places = self.page.document.fixed_decimal_places
-            if text and fixed_decimal_places > 0:
-                text = text[:-fixed_decimal_places] + "." + text[-fixed_decimal_places:]
-            return text
-        else:
-            return text
 
     def extend_rows(self):
         split_table = []
