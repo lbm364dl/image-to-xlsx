@@ -12,11 +12,11 @@ def file_extension(name):
 
 
 def save_workbook(workbook, where_to_save):
-    try:
-        workbook.save(where_to_save)
-    except IndexError:
-        workbook.create_sheet("Empty")
-        workbook.save(where_to_save)
+    if not workbook.sheetnames:
+        sheet = workbook.create_sheet("Empty")
+        sheet["A1"] = "Nothing detected"
+
+    workbook.save(where_to_save)
 
 
 def get_document_paths(input_path):
@@ -118,6 +118,10 @@ def get_aws_credentials():
     credentials = _read_aws_credentials("credentials")
     return {
         "region_name": conf.get("default", "region", fallback=None),
-        "aws_access_key_id": credentials.get("default", "aws_access_key_id", fallback=None),
-        "aws_secret_access_key": credentials.get("default", "aws_secret_access_key", fallback=None),
+        "aws_access_key_id": credentials.get(
+            "default", "aws_access_key_id", fallback=None
+        ),
+        "aws_secret_access_key": credentials.get(
+            "default", "aws_secret_access_key", fallback=None
+        ),
     }

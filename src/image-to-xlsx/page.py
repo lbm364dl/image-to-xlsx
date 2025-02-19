@@ -134,7 +134,6 @@ class Page:
                 compute_prefix=kwargs.get("compute_prefix"),
                 show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
                 show_detected_boxes=kwargs.get("show_detected_boxes"),
-                remove_dots_and_commas=kwargs.get("remove_dots_and_commas"),
             )
             tables.append(t)
 

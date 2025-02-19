@@ -1,15 +1,12 @@
-import os
 import numpy as np
 import cv2
 import pretrained
 import re
 from utils import split_footnotes, get_cell_color
 from collections import defaultdict
-from definitions import OUTPUT_PATH
 from PIL import Image
 from surya.detection import batch_text_detection
 from surya.tables import batch_table_recognition
-from surya.input.pdflines import get_table_blocks
 from tabled.assignment import assign_rows_columns
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import PatternFill, Border, Side
@@ -92,9 +89,7 @@ class Table:
 
         return cropped_imgs
 
-    def recognize_texts(
-        self, image_pad, compute_prefix, show_cropped_bboxes, remove_dots_and_commas
-    ):
+    def recognize_texts(self, image_pad, compute_prefix, show_cropped_bboxes):
         self.table_data = defaultdict(lambda: defaultdict(list))
 
         cropped_imgs = self.get_cropped_cell_images(
@@ -326,16 +321,13 @@ class Table:
         compute_prefix=10**9,
         show_cropped_bboxes=False,
         show_detected_boxes=False,
-        remove_dots_and_commas=False,
     ):
         self.recognize_structure(heuristic_thresh)
 
         if show_detected_boxes:
             self.visualize_table_bboxes()
 
-        self.recognize_texts(
-            image_pad, compute_prefix, show_cropped_bboxes, remove_dots_and_commas
-        )
+        self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
 
     def nlp_postprocess(
         self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
