@@ -1,25 +1,35 @@
+from io import BytesIO
+from pathlib import Path
+from nicegui import ui
+from fastapi.responses import StreamingResponse
+import zipfile
+
 MAX_WIDTH = 650
+CHUNK_SIZE = 1024 * 1024
 
 
-def extract_tables(uploaded_files, exception_queue, queue, options):
+def extract_tables(
+    uploaded_files, uploaded_files_pages, exception_queue, queue, options
+):
     import botocore.exceptions as aws_exceptions
     import traceback
     import main
 
     results = []
-    for file in uploaded_files.values():
+    for file, pages in zip(uploaded_files.values(), uploaded_files_pages.values()):
         queue.put_nowait(f"Processing file {file['name']}")
+        file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
-            table_workbook, footers_workbook = main.run(
-                file, page_ranges=file["pages"], **options
+            table_workbook, footers_workbook = main.run(file, **options)
+            results.append(
+                {
+                    "table_workbook": table_workbook,
+                    "footers_workbook": footers_workbook,
+                    "name": file["name"],
+                    "input_content": file["content"],
+                }
             )
-            results.append({
-                "table_workbook": table_workbook,
-                "footers_workbook": footers_workbook,
-                "name": file["name"],
-                "input_content": file["content"],
-            })
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -35,7 +45,50 @@ def extract_tables(uploaded_files, exception_queue, queue, options):
                 "Unexpected error, try again or check command line error and contact developers"
             )
 
-    return results
+    return create_results_zip(results) if results else None
+
+
+def create_results_zip(results):
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for result in results:
+            name = Path(result["name"]).stem
+            zipf.writestr(
+                f"{name}/{name}.xlsx", workbook_to_bytes(result["table_workbook"])
+            )
+            zipf.writestr(
+                f"{name}/footers_{name}.xlsx",
+                workbook_to_bytes(result["footers_workbook"]),
+            )
+            zipf.writestr(
+                f"{name}/{result['name']}",
+                result["input_content"],
+            )
+    buffer.seek(0)
+    return buffer.read()
+
+
+def workbook_to_bytes(workbook):
+    from utils import save_workbook
+
+    virtual_workbook = BytesIO()
+    save_workbook(workbook, virtual_workbook)
+    virtual_workbook.seek(0)
+    return virtual_workbook.read()
+
+
+@ui.page("/download")
+async def download_file():
+    return StreamingResponse(
+        iter_bytes(results_zip),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=results.zip"},
+    )
+
+
+def iter_bytes(data):
+    for i in range(0, len(data), CHUNK_SIZE):
+        yield data[i : i + CHUNK_SIZE]
 
 
 if __name__ == "__main__":
@@ -43,13 +96,9 @@ if __name__ == "__main__":
 
     freeze_support()
     from nicegui import ui, run
-    from pathlib import Path
     from definitions import INF
     from multiprocessing import Manager
-    from io import BytesIO
-    from utils import save_workbook
     import re
-    import zipfile
     import textwrap
 
     def aws_config_present():
@@ -58,43 +107,24 @@ if __name__ == "__main__":
         credentials_file = aws_dir / "credentials"
         return config_file.exists() and credentials_file.exists()
 
-    def workbook_to_bytes(workbook):
-        virtual_workbook = BytesIO()
-        save_workbook(workbook, virtual_workbook)
-        virtual_workbook.seek(0)
-        return virtual_workbook.read()
-
-    def create_results_zip(results):
-        buffer = BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for result in results:
-                name = Path(result["name"]).stem
-                zipf.writestr(
-                    f"{name}/{name}.xlsx", workbook_to_bytes(result["table_workbook"])
-                )
-                zipf.writestr(
-                    f"{name}/footers_{name}.xlsx",
-                    workbook_to_bytes(result["footers_workbook"]),
-                )
-                zipf.writestr(
-                    f"{name}/{result['name']}",
-                    result["input_content"],
-                )
-        buffer.seek(0)
-        return buffer.read()
-
     async def handle_extract_tables_click():
         global in_progress
         in_progress = True
         extract_button.enabled = False
-        results = await run.cpu_bound(
-            extract_tables, uploaded_files, exception_queue, queue, options
+        global results_zip
+        results_zip = await run.cpu_bound(
+            extract_tables,
+            uploaded_files,
+            uploaded_files_pages,
+            exception_queue,
+            queue,
+            options,
         )
         extract_button.enabled = True
         in_progress = False
-        if results:
+        if results_zip:
             ui.notify("Processing done. Downloading results...")
-            ui.download(create_results_zip(results), "results.zip")
+            ui.link("Download results zip", "/download", new_tab=True)
         else:
             ui.notify("Nothing to process")
 
@@ -307,7 +337,7 @@ if __name__ == "__main__":
             start, end = page_range
             page_ranges.append((int(start), int(end)))
 
-        uploaded_files[file_name] = {**uploaded_files[file_name], "pages": page_ranges}
+        uploaded_files_pages[file_name] = page_ranges
 
     def add_to_uploaded_files_list(file_name):
         with uploaded_files_list:
@@ -320,20 +350,22 @@ if __name__ == "__main__":
                     validation={"Wrong page range": validate_page_range},
                 )
 
-    def handle_upload(file):
-        uploaded_files[file.name] = {
-            "name": file.name,
-            "content": file.content.read(),
-            "pages": [(1, INF)],
-            "type": file.type,
-        }
+    async def handle_upload(file):
         ui.notify(f"Uploaded {file.name}")
 
         if file.type == "application/pdf":
             add_to_uploaded_files_list(file.name)
 
+        uploaded_files[file.name] = {
+            "name": file.name,
+            "content": await run.io_bound(lambda: file.content.read()),
+            "type": file.type,
+        }
+        uploaded_files_pages[file.name] = [(1, INF)]
+
     def reset_uploaded_files(file_upload):
         uploaded_files.clear()
+        uploaded_files_pages.clear()
         uploaded_files_list.clear()
         file_upload.reset()
         ui.notify("Removed all uploaded files")
@@ -376,16 +408,19 @@ if __name__ == "__main__":
 
     manager = Manager()
     uploaded_files = manager.dict()
-    options = manager.dict({
-        "method": "textract",
-        "unskew": False,
-        "show-detected-boxes": False,
-        "extend_rows": False,
-        "remove_dots_and_commas": False,
-        "fixed_decimal_places": 0,
-        "thousands_separator": ",",
-        "decimal_separator": ".",
-    })
+    uploaded_files_pages = manager.dict()
+    options = manager.dict(
+        {
+            "method": "textract",
+            "unskew": False,
+            "show-detected-boxes": False,
+            "extend_rows": False,
+            "remove_dots_and_commas": False,
+            "fixed_decimal_places": 0,
+            "thousands_separator": ",",
+            "decimal_separator": ".",
+        }
+    )
 
     in_progress = False
     queue = manager.Queue()
