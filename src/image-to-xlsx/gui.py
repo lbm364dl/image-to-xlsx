@@ -107,6 +107,17 @@ if __name__ == "__main__":
         credentials_file = aws_dir / "credentials"
         return config_file.exists() and credentials_file.exists()
 
+    def trigger_download():
+        # Use link clicking behaviour to avoid browser blocking
+        ui.run_javascript("""
+            const link = document.createElement('a');
+            link.href = '/download';
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        """)
+
     async def handle_extract_tables_click():
         global in_progress
         in_progress = True
@@ -124,7 +135,7 @@ if __name__ == "__main__":
         in_progress = False
         if results_zip:
             ui.notify("Processing done. Downloading results...")
-            ui.link("Download results zip", "/download", new_tab=True)
+            trigger_download()
         else:
             ui.notify("Nothing to process")
 
