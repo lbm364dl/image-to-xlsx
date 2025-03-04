@@ -4,14 +4,14 @@ import pickle
 import io
 import boto3
 import time
-from definitions import MAX_TEXTRACT_SYNC_SIZE
+from definitions import MAX_TEXTRACT_SYNC_SIZE, ONE_MB
 from table import Table
 from unskewing import correct_skew
 from binarization import binarize
 from PIL import Image
 from surya.detection import batch_text_detection
 from surya.layout import batch_layout_detection
-from utils import maybe_reduce_resolution, get_aws_credentials
+from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 
 class Page:
@@ -169,49 +169,21 @@ class Page:
         return self.build_textract_tables_from_response(response)
 
     def get_textract_response(self):
+        self.page = self.page.convert("RGB")
         self.page = maybe_reduce_resolution(self.page)
+        self.page = image_below_size(self.page, ONE_MB)
         textract = boto3.client("textract", **get_aws_credentials())
         img_byte_arr = io.BytesIO()
-        self.page.save(img_byte_arr, format="PNG")
+        self.page.save(img_byte_arr, format="JPEG")
         img_byte_arr = img_byte_arr.getvalue()
 
-        # Analyze file directly (small enough)
-        if len(img_byte_arr) <= MAX_TEXTRACT_SYNC_SIZE:
-            return textract.analyze_document(
-                Document={"Bytes": img_byte_arr},
-                FeatureTypes=["TABLES"],
-            )
-        # Too large, first upload to S3 and run asynchronous textract
-        else:
-            # Upload the document to S3
-            bucket_name = "test-textract-large-files"
-            file_name = "tmp_extract_page"
-            s3 = boto3.client("s3", **get_aws_credentials())
-            s3.put_object(Bucket=bucket_name, Key=file_name, Body=img_byte_arr)
+        # Analyze file directly (small enough after auto resize below 1MB)
+        assert len(img_byte_arr) <= MAX_TEXTRACT_SYNC_SIZE
 
-            # Call Textract to analyze the document
-            response = textract.start_document_analysis(
-                DocumentLocation={
-                    "S3Object": {"Bucket": bucket_name, "Name": file_name}
-                },
-                FeatureTypes=["TABLES"],  # Extract tables and forms; omit for raw text
-            )
-
-            job_id = response["JobId"]
-
-            # Poll for job completion
-            while True:
-                response = textract.get_document_analysis(JobId=job_id)
-                status = response["JobStatus"]
-                if status in ["SUCCEEDED", "FAILED"]:
-                    break
-                time.sleep(5)
-
-            # Delete the file from S3 after processing
-            s3.delete_object(Bucket=bucket_name, Key=file_name)
-            print(f"Deleted {file_name} from bucket {bucket_name}")
-
-            return response
+        return textract.analyze_document(
+            Document={"Bytes": img_byte_arr},
+            FeatureTypes=["TABLES"],
+        )
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]
