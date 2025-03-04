@@ -58,10 +58,11 @@ def create_results_zip(results):
                 f"{name}/footers_{name}.xlsx",
                 workbook_to_bytes(result["footers_workbook"]),
             )
-            zipf.writestr(
-                f"{name}/{result['name']}",
-                result["input_content"],
-            )
+            if options.get("include_input_files_in_output"):
+                zipf.writestr(
+                    f"{name}/{result['name']}",
+                    result["input_content"],
+                )
     buffer.seek(0)
     return buffer.read()
 
@@ -109,7 +110,7 @@ if __name__ == "__main__":
         global download_link
         with ui.row().classes("w-full"):
             download_link = (
-                ui.link("Download", "/download", new_tab=True)
+                ui.link("Download results", "/download", new_tab=True)
                 .classes(
                     "w-full shadow-md q-btn q-btn-item q-btn--flat q-btn--rectangle bg-primary text-white hover:cursor-pointer"
                 )
@@ -135,7 +136,7 @@ if __name__ == "__main__":
         extract_button.enabled = True
         in_progress = False
         if results_zip:
-            ui.notify("Processing done. Downloading results...")
+            ui.notify("Processing done. Please download results.")
             download_link.style("display: block;")
         else:
             ui.notify("Nothing to process")
@@ -310,6 +311,11 @@ if __name__ == "__main__":
         ui.label(
             "A zip file with the results will be downloaded, containing one folder for each input file. The output Excels will contain one sheet for each table detected in the file."
         ).classes(f"w-[{MAX_WIDTH}px]")
+        ui.checkbox(
+            "Include original files in output zip",
+            on_change=lambda e: toggle_option(e, "include_input_files_in_output"),
+            value=options.get("include_input_files_in_output"),
+        )
         global extract_button
         extract_button = ui.button(
             "Extract tables", on_click=handle_extract_tables_click
@@ -433,6 +439,7 @@ if __name__ == "__main__":
         "fixed_decimal_places": 0,
         "thousands_separator": ",",
         "decimal_separator": ".",
+        "include_input_files_in_output": True,
     })
 
     in_progress = False
