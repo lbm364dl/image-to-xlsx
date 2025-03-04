@@ -22,14 +22,12 @@ def extract_tables(
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
             table_workbook, footers_workbook = main.run(file, **options)
-            results.append(
-                {
-                    "table_workbook": table_workbook,
-                    "footers_workbook": footers_workbook,
-                    "name": file["name"],
-                    "input_content": file["content"],
-                }
-            )
+            results.append({
+                "table_workbook": table_workbook,
+                "footers_workbook": footers_workbook,
+                "name": file["name"],
+                "input_content": file["content"],
+            })
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -107,22 +105,25 @@ if __name__ == "__main__":
         credentials_file = aws_dir / "credentials"
         return config_file.exists() and credentials_file.exists()
 
-    def trigger_download():
-        # Use link clicking behaviour to avoid browser blocking
-        ui.run_javascript("""
-            const link = document.createElement('a');
-            link.href = '/download';
-            link.target = '_blank';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        """)
+    def create_download_link():
+        global download_link
+        with ui.row().classes("w-full"):
+            download_link = (
+                ui.link("Download", "/download", new_tab=True)
+                .classes(
+                    "w-full shadow-md q-btn q-btn-item q-btn--flat q-btn--rectangle bg-primary text-white hover:cursor-pointer"
+                )
+                .style("display: none;")
+            )
 
     async def handle_extract_tables_click():
         global in_progress
         in_progress = True
         extract_button.enabled = False
+        download_link.style("display: none;")
         global results_zip
+
+        in_progress_label.set_text("Initializing...")
         results_zip = await run.cpu_bound(
             extract_tables,
             uploaded_files,
@@ -135,7 +136,7 @@ if __name__ == "__main__":
         in_progress = False
         if results_zip:
             ui.notify("Processing done. Downloading results...")
-            trigger_download()
+            download_link.style("display: block;")
         else:
             ui.notify("Nothing to process")
 
@@ -320,6 +321,8 @@ if __name__ == "__main__":
                 globals(), "in_progress"
             )
 
+        create_download_link()
+
     def set_timers():
         ui.timer(
             0.1,
@@ -379,6 +382,7 @@ if __name__ == "__main__":
         uploaded_files_pages.clear()
         uploaded_files_list.clear()
         file_upload.reset()
+        download_link.style("display: none;")
         ui.notify("Removed all uploaded files")
 
     def toggle_option(event, option):
@@ -420,18 +424,16 @@ if __name__ == "__main__":
     manager = Manager()
     uploaded_files = manager.dict()
     uploaded_files_pages = manager.dict()
-    options = manager.dict(
-        {
-            "method": "textract",
-            "unskew": False,
-            "show-detected-boxes": False,
-            "extend_rows": False,
-            "remove_dots_and_commas": False,
-            "fixed_decimal_places": 0,
-            "thousands_separator": ",",
-            "decimal_separator": ".",
-        }
-    )
+    options = manager.dict({
+        "method": "textract",
+        "unskew": False,
+        "show-detected-boxes": False,
+        "extend_rows": False,
+        "remove_dots_and_commas": False,
+        "fixed_decimal_places": 0,
+        "thousands_separator": ",",
+        "decimal_separator": ".",
+    })
 
     in_progress = False
     queue = manager.Queue()
