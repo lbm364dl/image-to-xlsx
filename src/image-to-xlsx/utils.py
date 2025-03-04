@@ -2,6 +2,9 @@ import os
 import glob
 import re
 import configparser
+import io
+import math
+import sys
 from pathlib import Path
 from PIL import Image
 from definitions import MAX_TEXTRACT_DIMENSION
@@ -125,3 +128,29 @@ def get_aws_credentials():
             "default", "aws_secret_access_key", fallback=None
         ),
     }
+
+
+# https://stackoverflow.com/a/52281257
+def image_below_size(im, target_size):
+    # Min and Max quality
+    q_min, q_max = 25, 96
+    # Highest acceptable quality found
+    result_img = None
+    while q_min <= q_max:
+        m = math.floor((q_min + q_max) / 2)
+
+        # Encode into memory and get size
+        buffer = io.BytesIO()
+        im.save(buffer, format="JPEG", quality=m)
+        s = buffer.getbuffer().nbytes
+
+        if s <= target_size:
+            result_img = buffer
+            q_min = m + 1
+        elif s > target_size:
+            q_max = m - 1
+
+    if result_img:
+        return Image.open(result_img)
+    else:
+        raise Exception("No acceptable quality factor found")
