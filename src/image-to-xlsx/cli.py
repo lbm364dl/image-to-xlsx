@@ -120,6 +120,13 @@ def parse_args():
         default=0,
     )
     parser.add_argument(
+        "--fix-num-misspellings",
+        type=int,
+        choices={0, 1},
+        help="Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc... Default 1 (i.e. try to fix them)",
+        default=1,
+    )
+    parser.add_argument(
         "--decimal-separator",
         type=str,
         choices={",", "."},
@@ -130,7 +137,7 @@ def parse_args():
         "--thousands-separator",
         type=str,
         choices={",", "."},
-        help="Choose the thousands separator between dot or comma. Default dot (,)",
+        help="Choose the thousands separator between dot or comma. Default comma (,)",
         default=",",
     )
 

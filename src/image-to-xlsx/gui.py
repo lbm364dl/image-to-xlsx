@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 from nicegui import ui
 from fastapi.responses import StreamingResponse
+import datetime
 import zipfile
 
 MAX_WIDTH = 650
@@ -78,10 +79,11 @@ def workbook_to_bytes(workbook):
 
 @ui.page("/download")
 async def download_file():
+    when = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
     return StreamingResponse(
         iter_bytes(results_zip),
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=results.zip"},
+        headers={"Content-Disposition": f"attachment; filename=results_{when}.zip"},
     )
 
 
@@ -232,6 +234,12 @@ if __name__ == "__main__":
                 "Create one row for each text detected inside a cell instead of joining with a space. Only try this if you see that adjacent rows are mixed into a single row by mistake.",
                 on_change=lambda e: toggle_option(e, "extend_rows"),
                 value=options.get("extend_rows", False),
+            )
+
+            ui.checkbox(
+                "Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc...",
+                on_change=lambda e: toggle_option(e, "fix_num_misspellings"),
+                value=options.get("fix_num_misspellings", True),
             )
             remove_dots_and_commas = ui.checkbox(
                 "Remove all commas and dots from numeric cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
@@ -436,6 +444,7 @@ if __name__ == "__main__":
         "show-detected-boxes": False,
         "extend_rows": False,
         "remove_dots_and_commas": False,
+        "fix_num_misspellings": True,
         "fixed_decimal_places": 0,
         "thousands_separator": ",",
         "decimal_separator": ".",

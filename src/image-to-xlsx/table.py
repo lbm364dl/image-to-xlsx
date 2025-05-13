@@ -4,6 +4,7 @@ import pretrained
 import re
 from utils import split_footnotes, get_cell_color
 from collections import defaultdict
+from definitions import MISSPELLINGS, MISSPELLINGS_REGEX
 from PIL import Image
 from surya.detection import batch_text_detection
 from surya.tables import batch_table_recognition
@@ -267,12 +268,15 @@ class Table:
         return table_data
 
     def overwrite_seminumeric_cells_confidence(
-        self, table_matrix, decimal_separator, thousands_separator
+        self, table_matrix, decimal_separator, thousands_separator, fix_num_misspellings
     ):
         for i, row in enumerate(table_matrix):
             for j, col in enumerate(row):
                 _, forced_numeric = self.maybe_parse_numeric_cell(
-                    col["text"], decimal_separator, thousands_separator
+                    col["text"],
+                    decimal_separator,
+                    thousands_separator,
+                    fix_num_misspellings,
                 )
                 # If true, will add a thick border to the cell for review
                 table_matrix[i][j]["forced_numeric"] = forced_numeric
@@ -280,12 +284,15 @@ class Table:
         return table_matrix
 
     def maybe_parse_numeric_cells(
-        self, table_matrix, decimal_separator, thousands_separator
+        self, table_matrix, decimal_separator, thousands_separator, fix_num_misspellings
     ):
         for i, row in enumerate(table_matrix):
             for j, col in enumerate(row):
                 table_matrix[i][j]["text"], _ = self.maybe_parse_numeric_cell(
-                    col["text"], decimal_separator, thousands_separator
+                    col["text"],
+                    decimal_separator,
+                    thousands_separator,
+                    fix_num_misspellings,
                 )
 
         return table_matrix
@@ -294,16 +301,24 @@ class Table:
         precision = self.page.document.fixed_decimal_places
         return float(value) / 10**precision
 
-    def maybe_parse_numeric_cell(self, text, decimal_separator, thousands_separator):
+    def maybe_parse_numeric_cell(
+        self, text, decimal_separator, thousands_separator, fix_num_misspellings
+    ):
         if self.is_numeric_cell(text):
             text = text.replace(thousands_separator, "")
             if decimal_separator == ",":
                 text = text.replace(decimal_separator, ".")
 
+            if fix_num_misspellings:
+                text = MISSPELLINGS_REGEX.sub(
+                    lambda x: str(MISSPELLINGS[x.group()]), text.upper()
+                )
+
             try:
                 return self.cell_to_float(text), False
             except ValueError:
-                only_numeric = re.sub(r"[^-.0-9]", "", text)
+                maybe_sign = "-" if text.startswith("-") else ""
+                only_numeric = maybe_sign + re.sub(r"[^.0-9]", "", text)
                 if only_numeric:
                     try:
                         return self.cell_to_float(only_numeric), True

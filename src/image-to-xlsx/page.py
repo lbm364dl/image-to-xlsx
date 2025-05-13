@@ -89,6 +89,7 @@ class Page:
                 table_matrix,
                 kwargs.get("decimal_separator"),
                 kwargs.get("thousands_separator"),
+                kwargs.get("fix_num_misspellings"),
             )
 
             if kwargs.get("nlp_postprocess"):
@@ -102,6 +103,7 @@ class Page:
                 table_matrix,
                 kwargs.get("decimal_separator"),
                 kwargs.get("thousands_separator"),
+                kwargs.get("fix_num_misspellings"),
             )
 
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
