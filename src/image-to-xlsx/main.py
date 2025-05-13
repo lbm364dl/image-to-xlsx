@@ -25,6 +25,7 @@ def run(
     remove_dots_and_commas=0,
     decimal_separator=".",
     thousands_separator=",",
+    fix_num_misspellings=1,
     **kwargs,
 ):
     d = Document(
@@ -51,6 +52,7 @@ def run(
             remove_dots_and_commas=remove_dots_and_commas,
             decimal_separator=decimal_separator,
             thousands_separator=thousands_separator,
+            fix_num_misspellings=fix_num_misspellings,
         )
 
     return d.workbook, d.footers_workbook
