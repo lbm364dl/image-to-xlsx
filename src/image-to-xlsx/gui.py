@@ -235,6 +235,12 @@ if __name__ == "__main__":
                 on_change=lambda e: toggle_option(e, "extend_rows"),
                 value=options.get("extend_rows", False),
             )
+
+            ui.checkbox(
+                "Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc...",
+                on_change=lambda e: toggle_option(e, "fix_num_misspellings"),
+                value=options.get("fix_num_misspellings", True),
+            )
             remove_dots_and_commas = ui.checkbox(
                 "Remove all commas and dots from numeric cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
                 on_change=lambda e: toggle_option(e, "remove_dots_and_commas"),
@@ -438,6 +444,7 @@ if __name__ == "__main__":
         "show-detected-boxes": False,
         "extend_rows": False,
         "remove_dots_and_commas": False,
+        "fix_num_misspellings": True,
         "fixed_decimal_places": 0,
         "thousands_separator": ",",
         "decimal_separator": ".",
