@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 from nicegui import ui
 from fastapi.responses import StreamingResponse
+import datetime
 import zipfile
 
 MAX_WIDTH = 650
@@ -78,10 +79,11 @@ def workbook_to_bytes(workbook):
 
 @ui.page("/download")
 async def download_file():
+    when = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
     return StreamingResponse(
         iter_bytes(results_zip),
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=results.zip"},
+        headers={"Content-Disposition": f"attachment; filename=results_{when}.zip"},
     )
 
 
