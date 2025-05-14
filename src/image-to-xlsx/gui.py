@@ -44,10 +44,10 @@ def extract_tables(
                 "Unexpected error, try again or check command line error and contact developers"
             )
 
-    return create_results_zip(results) if results else None
+    return create_results_zip(results, options) if results else None
 
 
-def create_results_zip(results):
+def create_results_zip(results, options):
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for result in results:
