@@ -242,7 +242,7 @@ if __name__ == "__main__":
                 value=options.get("fix_num_misspellings", True),
             )
             remove_dots_and_commas = ui.checkbox(
-                "Remove all commas and dots from numeric cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
+                "Remove all commas and dots from cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
                 on_change=lambda e: toggle_option(e, "remove_dots_and_commas"),
                 value=options.get("remove_dots_and_commas", False),
             )

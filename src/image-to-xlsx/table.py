@@ -226,7 +226,7 @@ class Table:
 
     def clean_cell_text(self, cell_text, remove_dots_and_commas):
         cell_text = ILLEGAL_CHARACTERS_RE.sub(r"", cell_text)
-        if remove_dots_and_commas and self.is_numeric_cell(cell_text):
+        if remove_dots_and_commas:
             cell_text = cell_text.replace(".", "").replace(",", "")
 
         return cell_text
