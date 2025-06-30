@@ -1,4 +1,8 @@
-WIP
+## I only want to use the Windows GUI app
+
+You can check the [relevant instructions here](./src/image-to-xlsx/app_usage.md)
+
+## I want to run the command line tool myself
 
 It is highly recommended to use a virtual environment. After cloning this repository, from its root directory do the following steps, only the first time:
 
