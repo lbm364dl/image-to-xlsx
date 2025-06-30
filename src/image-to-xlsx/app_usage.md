@@ -8,13 +8,17 @@ These instructions are then for Windows.
     one, preferably the latest one. In the assets section of the release page
     you must download and extract the `image-to-xlsx.zip` file. The zip
     extraction might take a while, but it will eventually finish.
+
     ![download zip](imgs/download-zip.png)
+
 2. Open the `image_to_xlsx.exe` program. **If it asks for permission to run,
     run anyway** (if you trust this program). It might be a prompt saying
     something like _Windows protected your PC_. Click _more info_ and
     _run anyway_. I think this shows up because of downloading from an unknown
     source but I'm not sure. 
+
     ![windows protect click more info](./imgs/windows-protect-more-info.png)
+
     ![windows protect click run anyway](./imgs/windows-protect-run-anyway.png)
 
     The app works in your browser. It will first open (and keep open) a Windows
@@ -24,6 +28,7 @@ These instructions are then for Windows.
     happens but you **should be fine even rejecting** these. When you're done
     and you want to close the app, you should close both the terminal window
     and the browser tab.
+
 3. (Optional) Add AWS (Amazon Web Services) credentials. You will need this if
     you want to use the Amazon Textract method for table extraction, which
     is the most reliable one. If you are a collaborator of our 
@@ -36,6 +41,7 @@ These instructions are then for Windows.
     `AWS Access Key Id` and `AWS Secret Access Key` (which you should have) and
     `AWS region`, which you should also know (if coming from WHEP, this should
     be `eu-west-3`).
+
 4. Enjoy using the tool. Below I leave some explanation of the different
     options it has available and how to upload some files and run an extraction.
 
@@ -62,12 +68,15 @@ Then there are some options that you can use if you want:
 After choosing method and options, we must **upload the files**. Remember that
 only PDFs and images (PNG, JPG) are accepted, and that you **first** have to
 **choose files** and **then** manually **also click the upload button**. 
+
 ![click upload button again](./imgs/click-upload-again.png)
+
 After that you will be asked for each PDF file if you want to specify a smaller
 range of pages to process, in case you don't want to process all of them. The
 ranges work like in other tools, i.e., you can include several ranges separated
 by commas, and each range can be a single page number or an interval of start
 and end page numbers separated by commas (e.g. `1,2-5,7-9`).
+
 ![file correctly uploaded](./imgs/file-correctly-uploaded.png)
 
 We **recommend not running** the extraction for a **lot of pages at the same
