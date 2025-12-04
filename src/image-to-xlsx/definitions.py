@@ -23,3 +23,7 @@ MISSPELLINGS = {
     "g": 9,
 }
 MISSPELLINGS_REGEX = re.compile("|".join(MISSPELLINGS.keys()))
+
+NOT_NUMBER = 0
+ONE_NUMBER = 1
+AT_LEAST_TWO_NUMBERS = 2

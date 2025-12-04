@@ -17,18 +17,25 @@ def extract_tables(
     import main
 
     results = []
-    for file, pages in zip(uploaded_files.values(), uploaded_files_pages.values()):
-        queue.put_nowait(f"Processing file {file['name']}")
+    total_files = len(uploaded_files)
+    for i, (file, pages) in enumerate(
+        zip(uploaded_files.values(), uploaded_files_pages.values())
+    ):
+        queue.put_nowait(
+            f"({i + 1} out of {total_files}) Processing file {file['name']}"
+        )
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
             table_workbook, footers_workbook = main.run(file, **options)
-            results.append({
-                "table_workbook": table_workbook,
-                "footers_workbook": footers_workbook,
-                "name": file["name"],
-                "input_content": file["content"],
-            })
+            results.append(
+                {
+                    "table_workbook": table_workbook,
+                    "footers_workbook": footers_workbook,
+                    "name": file["name"],
+                    "input_content": file["content"],
+                }
+            )
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -324,6 +331,12 @@ if __name__ == "__main__":
             on_change=lambda e: toggle_option(e, "include_input_files_in_output"),
             value=options.get("include_input_files_in_output"),
         )
+
+        ui.html(
+            'The cells in the output Excels have a color code. For more details see '
+            '<a href="https://saco.csic.es/s/ESYzMcR9NWjWbrB" target="_blank" style="color: #1976d2; text-decoration: underline;">the legend sheet</a>.'
+        ).classes(f"w-[{MAX_WIDTH}px]")
+
         global extract_button
         extract_button = ui.button(
             "Extract tables", on_click=handle_extract_tables_click
@@ -438,18 +451,20 @@ if __name__ == "__main__":
     manager = Manager()
     uploaded_files = manager.dict()
     uploaded_files_pages = manager.dict()
-    options = manager.dict({
-        "method": "textract",
-        "unskew": False,
-        "show-detected-boxes": False,
-        "extend_rows": False,
-        "remove_dots_and_commas": False,
-        "fix_num_misspellings": True,
-        "fixed_decimal_places": 0,
-        "thousands_separator": ",",
-        "decimal_separator": ".",
-        "include_input_files_in_output": True,
-    })
+    options = manager.dict(
+        {
+            "method": "textract",
+            "unskew": False,
+            "show-detected-boxes": False,
+            "extend_rows": False,
+            "remove_dots_and_commas": False,
+            "fix_num_misspellings": True,
+            "fixed_decimal_places": 0,
+            "thousands_separator": ",",
+            "decimal_separator": ".",
+            "include_input_files_in_output": True,
+        }
+    )
 
     in_progress = False
     queue = manager.Queue()
