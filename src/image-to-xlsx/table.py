@@ -265,6 +265,8 @@ class Table:
                     "confidence": None,
                     "footnotes": [],
                     "cnt_numbers": 0,
+                    "cnt_dots": 0,
+                    "cnt_commas": 0,
                 }
                 for _ in range(m)
             ]
