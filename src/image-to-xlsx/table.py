@@ -176,10 +176,10 @@ class Table:
             bottom=Side(style="thick", color="0000FF"),
         )
         thick_violet_border = Border(
-            left=Side(style="thick", color="8A2BE2"),
-            right=Side(style="thick", color="8A2BE2"),
-            top=Side(style="thick", color="8A2BE2"),
-            bottom=Side(style="thick", color="8A2BE2"),
+            left=Side(style="thick", color="FF00FF"),
+            right=Side(style="thick", color="FF00FF"),
+            top=Side(style="thick", color="FF00FF"),
+            bottom=Side(style="thick", color="FF00FF"),
         )
 
         self.page.document.footers_workbook.active.append(
