@@ -329,6 +329,12 @@ if __name__ == "__main__":
             on_change=lambda e: toggle_option(e, "include_input_files_in_output"),
             value=options.get("include_input_files_in_output"),
         )
+
+        ui.html(
+            'The cells in the output Excels have a color code. For more details see '
+            '<a href="https://saco.csic.es/s/ESYzMcR9NWjWbrB" target="_blank" style="color: #1976d2; text-decoration: underline;">the legend sheet</a>.'
+        ).classes(f"w-[{MAX_WIDTH}px]")
+
         global extract_button
         extract_button = ui.button(
             "Extract tables", on_click=handle_extract_tables_click
