@@ -17,8 +17,13 @@ def extract_tables(
     import main
 
     results = []
-    for file, pages in zip(uploaded_files.values(), uploaded_files_pages.values()):
-        queue.put_nowait(f"Processing file {file['name']}")
+    total_files = len(uploaded_files)
+    for i, (file, pages) in enumerate(
+        zip(uploaded_files.values(), uploaded_files_pages.values())
+    ):
+        queue.put_nowait(
+            f"({i + 1} out of {total_files}) Processing file {file['name']}"
+        )
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
