@@ -28,12 +28,14 @@ def extract_tables(
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
             table_workbook, footers_workbook = main.run(file, **options)
-            results.append({
-                "table_workbook": table_workbook,
-                "footers_workbook": footers_workbook,
-                "name": file["name"],
-                "input_content": file["content"],
-            })
+            results.append(
+                {
+                    "table_workbook": table_workbook,
+                    "footers_workbook": footers_workbook,
+                    "name": file["name"],
+                    "input_content": file["content"],
+                }
+            )
         except (
             aws_exceptions.EndpointConnectionError,
             aws_exceptions.NoRegionError,
@@ -449,18 +451,20 @@ if __name__ == "__main__":
     manager = Manager()
     uploaded_files = manager.dict()
     uploaded_files_pages = manager.dict()
-    options = manager.dict({
-        "method": "textract",
-        "unskew": False,
-        "show-detected-boxes": False,
-        "extend_rows": False,
-        "remove_dots_and_commas": False,
-        "fix_num_misspellings": True,
-        "fixed_decimal_places": 0,
-        "thousands_separator": ",",
-        "decimal_separator": ".",
-        "include_input_files_in_output": True,
-    })
+    options = manager.dict(
+        {
+            "method": "textract",
+            "unskew": False,
+            "show-detected-boxes": False,
+            "extend_rows": False,
+            "remove_dots_and_commas": False,
+            "fix_num_misspellings": True,
+            "fixed_decimal_places": 0,
+            "thousands_separator": ",",
+            "decimal_separator": ".",
+            "include_input_files_in_output": True,
+        }
+    )
 
     in_progress = False
     queue = manager.Queue()
