@@ -220,6 +220,7 @@ if __name__ == "__main__":
             {
                 "textract": "AWS Textract (commercial)",
                 "surya+paddle": "Surya and Paddle OCR (free open source)",
+                "paddleocr-vl": "PaddleOCR-VL 1.5 (free open source)",
                 "pdf-text": "No OCR, use text in PDF",
             },
             label="Extraction method",
@@ -235,7 +236,7 @@ if __name__ == "__main__":
                 "Try to fix image rotation (can be very slow for large inputs)",
                 on_change=lambda e: toggle_option(e, "unskew"),
                 value=options.get("unskew", False),
-            ).bind_visibility_from(method_option, "value", lambda v: v != "pdf-text")
+            ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl"))
 
             ui.checkbox(
                 "Create one row for each text detected inside a cell instead of joining with a space. Only try this if you see that adjacent rows are mixed into a single row by mistake.",
@@ -429,6 +430,9 @@ if __name__ == "__main__":
             )
             ui.item(
                 "Surya and Paddle OCR: uses free open source AI models for table recognition. More experimental and slower. The first time it takes even longer because it has to download the models."
+            )
+            ui.item(
+                "PaddleOCR-VL 1.5: uses the PaddleOCR Vision-Language model for document parsing and table extraction. Free open source, supports 109 languages. First run downloads models automatically."
             )
             ui.item(
                 "PDF text: does not rely on AI models and instead uses information stored in the PDF. Only use if your PDF has embedded text, that is, if you can select and copy the contents of the table."

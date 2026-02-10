@@ -1,3 +1,10 @@
+import os
+
+# Workaround: PaddlePaddle's default auto_growth GPU allocator can enter
+# an infinite ioctl loop on some driver/GPU combos (e.g. RTX A2000, driver 580).
+# Must be set before importing paddle anywhere.
+os.environ.setdefault("FLAGS_allocator_strategy", "naive_best_fit")
+
 import numpy as np
 import pretrained
 import pickle
@@ -76,6 +83,7 @@ class Page:
             "pdf-text": self.get_page_tables_with_pdf_text,
             "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
+            "paddleocr-vl": self.get_page_tables_paddleocr_vl,
         }
 
         tables = get_page_tables_method[self.document.method](**kwargs)
@@ -186,6 +194,50 @@ class Page:
             Document={"Bytes": img_byte_arr},
             FeatureTypes=["TABLES"],
         )
+
+    def get_page_tables_paddleocr_vl(self, **kwargs):
+        import tempfile
+        from paddleocr import PaddleOCRVL
+
+        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
+        device = kwargs.get("paddleocr_vl_device")
+        if device is None:
+            import paddle
+
+            device = "gpu:0" if paddle.device.cuda.device_count() > 0 else "cpu"
+
+        pipeline = PaddleOCRVL(device=device)
+
+        # Save the page image to a temp file for PaddleOCR-VL input
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+            if isinstance(self.page, Image.Image):
+                self.page.save(tmp_path)
+            else:
+                Image.fromarray(np.array(self.page)).save(tmp_path)
+
+        try:
+            output = pipeline.predict(tmp_path)
+            tables = []
+            for res in output:
+                res_json = res.json["res"]
+                parsing_res_list = res_json.get("parsing_res_list", [])
+                for block in parsing_res_list:
+                    if block.get("block_label") == "table":
+                        markdown_content = block.get("block_content", "")
+                        if not markdown_content.strip():
+                            continue
+                        bbox = block.get("block_bbox", [0, 0, 0, 0])
+                        if hasattr(bbox, "tolist"):
+                            bbox = bbox.tolist()
+                        t = Table(self.page, self, bbox)
+                        t.set_table_from_paddleocr_vl_markdown(markdown_content)
+                        tables.append(t)
+
+            return tables
+        finally:
+            os.unlink(tmp_path)
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]

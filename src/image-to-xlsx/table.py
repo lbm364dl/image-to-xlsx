@@ -35,7 +35,7 @@ class Table:
         self.page = page
         self.footer_text = None
 
-        if not page.document.method == "pdf-text":
+        if page.document.method not in ("pdf-text", "paddleocr-vl"):
             self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
             self.table_bbox = table_bbox
@@ -44,6 +44,9 @@ class Table:
             self.det_model = det_model or pretrained.det_model
             self.det_processor = det_processor or pretrained.det_processor
             self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
+        elif page.document.method == "paddleocr-vl":
+            self.image = whole_image
+            self.table_bbox = table_bbox
 
     def reject_large_bboxes(self, bboxes, thresh=30):
         return [tb for tb in bboxes if tb.bbox[3] - tb.bbox[1] <= thresh]
@@ -228,12 +231,12 @@ class Table:
     def join_cell_parts(self, cell):
         texts = [cell_part["text"] for cell_part in cell]
         conf_arr = np.array(
-            [cell_part["confidence"] for cell_part in cell if cell_part["confidence"]]
+            [cell_part["confidence"] for cell_part in cell if cell_part["confidence"] is not None]
         )
-        confidence = conf_arr.mean()
+        confidence = conf_arr.mean() if conf_arr.size > 0 else None
         return {
             "text": " ".join(texts),
-            "confidence": confidence if not np.isnan(confidence) else None,
+            "confidence": confidence if confidence is not None and not np.isnan(confidence) else None,
         }
 
     def clean_cell_text(self, cell_text, remove_dots_and_commas):
@@ -352,6 +355,83 @@ class Table:
                     return only_numeric, NOT_NUMBER
             else:
                 return "", NOT_NUMBER
+
+    def set_table_from_paddleocr_vl_markdown(self, markdown_text):
+        """Parse PaddleOCR-VL table output into self.table_data.
+
+        Supports HTML tables ("<table>...") and markdown pipe tables.
+        """
+        from html.parser import HTMLParser
+        import html
+
+        def parse_html_table(text):
+            class _TableHTMLParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.rows = []
+                    self._current_row = None
+                    self._in_cell = False
+                    self._cell_buf = []
+
+                def handle_starttag(self, tag, attrs):
+                    if tag == "tr":
+                        self._current_row = []
+                    elif tag in ("td", "th"):
+                        self._in_cell = True
+                        self._cell_buf = []
+
+                def handle_endtag(self, tag):
+                    if tag in ("td", "th") and self._in_cell:
+                        cell_text = "".join(self._cell_buf).strip()
+                        self._current_row.append(cell_text)
+                        self._in_cell = False
+                        self._cell_buf = []
+                    elif tag == "tr" and self._current_row is not None:
+                        if self._current_row:
+                            self.rows.append(self._current_row)
+                        self._current_row = None
+
+                def handle_data(self, data):
+                    if self._in_cell:
+                        self._cell_buf.append(html.unescape(data))
+
+            parser = _TableHTMLParser()
+            parser.feed(text)
+            return parser.rows
+
+        def parse_markdown_table(text):
+            lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
+
+            # Filter out separator lines (e.g., |---|---|)
+            data_lines = []
+            for line in lines:
+                stripped = line.strip("|").strip()
+                # A separator line consists only of dashes, pipes, colons, and spaces
+                if stripped and not all(c in "-|: " for c in stripped):
+                    data_lines.append(line)
+
+            rows = []
+            for line in data_lines:
+                cells = line.split("|")
+                if cells and cells[0].strip() == "":
+                    cells = cells[1:]
+                if cells and cells[-1].strip() == "":
+                    cells = cells[:-1]
+                rows.append([cell.strip() for cell in cells])
+
+            return rows
+
+        self.table_data = defaultdict(lambda: defaultdict(list))
+        if "<table" in markdown_text.lower():
+            rows = parse_html_table(markdown_text)
+        else:
+            rows = parse_markdown_table(markdown_text)
+
+        for row_idx, row in enumerate(rows):
+            for col_idx, cell_text in enumerate(row):
+                self.table_data[row_idx][col_idx] = [
+                    {"text": cell_text.strip(), "confidence": None}
+                ]
 
     def set_table_from_surya_paddle(
         self,
