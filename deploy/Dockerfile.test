@@ -1,0 +1,65 @@
+# Dockerfile for local testing of the Apache reverse proxy setup.
+# This simulates the Rocky Linux production environment.
+#
+# Usage: docker compose -f deploy/docker-compose.test.yml up --build
+
+FROM rockylinux:9
+
+# Enable CRB repo (needed for gobject-introspection-devel)
+RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb
+
+# Install Apache and Python (no mod_ssl — not needed for local HTTP testing)
+# Note: CUDA libraries will be provided by the NVIDIA Container Toolkit at runtime
+RUN dnf install -y \
+    httpd \
+    python3.12 python3.12-devel python3.12-pip \
+    gcc gcc-c++ cmake \
+    pkg-config cairo-devel gobject-introspection-devel \
+    libffi-devel openssl-devel \
+    mesa-libGL \
+    && dnf clean all
+
+# Install supervisord to run both Apache and the Python app
+RUN python3.12 -m pip install supervisor
+
+# Copy Apache config
+COPY deploy/image-to-xlsx.conf /etc/httpd/conf.d/image-to-xlsx.conf
+# Remove default SSL config (we don't use HTTPS in the test container)
+RUN rm -f /etc/httpd/conf.d/ssl.conf
+
+# Copy application
+COPY . /opt/image-to-xlsx
+WORKDIR /opt/image-to-xlsx
+
+# Create virtualenv and install minimal deps (PaddleOCR-VL + NiceGUI only)
+RUN python3.12 -m venv env \
+    && ln -sf python3.12 env/bin/python \
+    && env/bin/pip install --upgrade pip setuptools wheel \
+    && env/bin/pip install -r requirements_docker.txt
+
+# Supervisord config to run both services
+RUN cat > /etc/supervisord.conf <<'EOF'
+[supervisord]
+nodaemon=true
+logfile=/var/log/supervisord.log
+
+[program:app]
+command=/opt/image-to-xlsx/env/bin/python -m gui
+directory=/opt/image-to-xlsx/src/image-to-xlsx
+environment=HOST="127.0.0.1",PORT="8080",STORAGE_SECRET="docker-test-secret"
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:httpd]
+command=/usr/sbin/httpd -D FOREGROUND
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+
+EXPOSE 80
+
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]

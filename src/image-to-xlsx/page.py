@@ -6,18 +6,14 @@ import os
 os.environ.setdefault("FLAGS_allocator_strategy", "naive_best_fit")
 
 import numpy as np
-import pretrained
 import pickle
 import io
-import boto3
 import time
 from definitions import MAX_TEXTRACT_SYNC_SIZE, ONE_MB
 from table import Table
 from unskewing import correct_skew
 from binarization import binarize
 from PIL import Image
-from surya.detection import batch_text_detection
-from surya.layout import batch_layout_detection
 from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 
@@ -49,6 +45,8 @@ class Page:
         layout_processor=None,
         ocr_pipeline=None,
     ):
+        import pretrained
+
         self.model = model or pretrained.model()
         self.processor = processor or pretrained.processor()
         self.det_model = det_model or pretrained.det_model()
@@ -65,6 +63,9 @@ class Page:
         self.page = binarize(self.page, method, block_size, constant)
 
     def detect_tables(self):
+        from surya.detection import batch_text_detection
+        from surya.layout import batch_layout_detection
+
         [line_prediction] = batch_text_detection(
             [self.page], self.det_model, self.det_processor
         )
@@ -179,6 +180,8 @@ class Page:
         return self.build_textract_tables_from_response(response)
 
     def get_textract_response(self):
+        import boto3
+
         self.page = self.page.convert("RGB")
         self.page = maybe_reduce_resolution(self.page)
         self.page = image_below_size(self.page, ONE_MB)
@@ -204,7 +207,6 @@ class Page:
         device = kwargs.get("paddleocr_vl_device")
         if device is None:
             import paddle
-
             device = "gpu:0" if paddle.device.cuda.device_count() > 0 else "cpu"
 
         pipeline = PaddleOCRVL(device=device)

@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-import pretrained
+pretrained = None
 import re
 from utils import split_footnotes, get_cell_color
 from collections import defaultdict
@@ -12,9 +12,9 @@ from definitions import (
     AT_LEAST_TWO_NUMBERS,
 )
 from PIL import Image
-from surya.detection import batch_text_detection
-from surya.tables import batch_table_recognition
-from tabled.assignment import assign_rows_columns
+batch_text_detection = None
+batch_table_recognition = None
+assign_rows_columns = None
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import PatternFill, Border, Side
 from openpyxl.comments import Comment
@@ -36,6 +36,15 @@ class Table:
         self.footer_text = None
 
         if page.document.method not in ("pdf-text", "paddleocr-vl"):
+            global pretrained, batch_text_detection, batch_table_recognition
+            if pretrained is None:
+                import pretrained as _pretrained
+                pretrained = _pretrained
+            if batch_text_detection is None or batch_table_recognition is None:
+                from surya.detection import batch_text_detection as _batch_text_detection
+                from surya.tables import batch_table_recognition as _batch_table_recognition
+                batch_text_detection = _batch_text_detection
+                batch_table_recognition = _batch_table_recognition
             self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
             self.table_bbox = table_bbox
@@ -75,6 +84,10 @@ class Table:
             [self.cropped_img], [cell_bboxes], self.model, self.processor
         )
 
+        global assign_rows_columns
+        if assign_rows_columns is None:
+            from tabled.assignment import assign_rows_columns as _assign_rows_columns
+            assign_rows_columns = _assign_rows_columns
         self.table["cells"] = assign_rows_columns(
             table_pred, self.table["img"].size, heuristic_thresh
         )

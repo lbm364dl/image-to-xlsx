@@ -1,0 +1,21 @@
+[Unit]
+Description=Image to XLSX - NiceGUI Table Extraction Application
+After=network.target
+
+[Service]
+Type=simple
+User=image-to-xlsx
+Group=image-to-xlsx
+WorkingDirectory=/opt/image-to-xlsx/src/image-to-xlsx
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=MAX_CONCURRENT_EXTRACTIONS=1
+EnvironmentFile=-/opt/image-to-xlsx/deploy/.env
+ExecStart=/opt/image-to-xlsx/env/bin/python -m gui
+Restart=on-failure
+RestartSec=5
+# Give time for model loading on startup
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

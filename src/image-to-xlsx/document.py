@@ -45,15 +45,26 @@ class Document:
                 self.pages = {i: self.pdf.load_page(i - 1) for i in self.page_nums}
             else:
                 pdf = pypdfium2.PdfDocument(BytesIO(document))
-                self.pages = dict(
-                    zip(
-                        self.page_nums,
-                        pdf.render(
-                            pypdfium2.PdfBitmap.to_pil,
-                            page_indices=[i - 1 for i in self.page_nums],
-                            scale=2,
-                        ),
+                if hasattr(pdf, "render"):
+                    self.pages = dict(
+                        zip(
+                            self.page_nums,
+                            pdf.render(
+                                pypdfium2.PdfBitmap.to_pil,
+                                page_indices=[i - 1 for i in self.page_nums],
+                                scale=2,
+                            ),
+                        )
                     )
-                )
+                else:
+                    pages = {}
+                    for page_num in self.page_nums:
+                        page = pdf.get_page(page_num - 1)
+                        try:
+                            bitmap = page.render(scale=2)
+                            pages[page_num] = bitmap.to_pil()
+                        finally:
+                            page.close()
+                    self.pages = pages
         else:
             self.pages = {1: Image.open(BytesIO(document))}

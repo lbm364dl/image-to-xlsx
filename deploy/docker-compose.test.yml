@@ -1,0 +1,27 @@
+# Docker Compose for local testing of the Apache + NiceGUI stack.
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.test.yml up --build
+#
+# Then open http://localhost in your browser.
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.test
+    ports:
+      - "80:80" # Apache (what users will access)
+      - "8080:8080" # Direct app access (for debugging)
+    environment:
+      - HOST=127.0.0.1
+      - PORT=8080
+      - STORAGE_SECRET=docker-test-secret
+      - MAX_CONCURRENT_EXTRACTIONS=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
