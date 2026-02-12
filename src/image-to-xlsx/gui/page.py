@@ -59,38 +59,15 @@ def register_pages(manager, extraction_semaphore):
             else:
                 ui.notify("Nothing to process")
 
-        async def handle_upload(file):
-            filename = (
-                getattr(file, "name", None)
-                or getattr(file, "filename", None)
-                or getattr(file, "file_name", None)
-                or (file.get("name") if isinstance(file, dict) else None)
-                or (file.get("filename") if isinstance(file, dict) else None)
-                or "uploaded_file"
-            )
-            content_type = (
-                getattr(file, "type", None)
-                or getattr(file, "content_type", None)
-                or (file.get("type") if isinstance(file, dict) else None)
-                or (file.get("content_type") if isinstance(file, dict) else None)
-                or ""
-            )
+        async def handle_upload(e):
+            filename = getattr(e.file, "name", "uploaded_file")
+            content_type = getattr(e.file, "content_type", "")
+            read_result = e.file.read()
+            if hasattr(read_result, "__await__"):
+                raw_content = await read_result
+            else:
+                raw_content = read_result
 
-            raw_content = getattr(file, "content", None)
-            if raw_content is None and isinstance(file, dict):
-                raw_content = file.get("content")
-            if raw_content is None:
-                file_obj = getattr(file, "file", None)
-                if file_obj is None and hasattr(file, "read"):
-                    file_obj = file
-                if file_obj is not None and hasattr(file_obj, "read"):
-                    read_result = file_obj.read()
-                    if hasattr(read_result, "__await__"):
-                        raw_content = await read_result
-                    else:
-                        raw_content = await run.io_bound(file_obj.read)
-            if raw_content is not None and hasattr(raw_content, "read"):
-                raw_content = await run.io_bound(raw_content.read)
             if raw_content is None:
                 ui.notify("Upload failed: could not read file contents.")
                 return
