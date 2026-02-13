@@ -14,14 +14,14 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices={"surya+paddle", "pdf-text", "textract", "textract-pickle-debug", "paddleocr-vl"},
+        choices={"surya", "pdf-text", "textract", "textract-pickle-debug", "paddleocr-vl"},
         help=textwrap.dedent("""\
-        Method to use for table recognition. Default surya+paddle. Methods:
-        - surya+paddle: opensource AI table recognition using surya library and OCR each cell using Paddle
+        Method to use for table recognition. Default surya. Methods:
+        - surya: open source AI table recognition and OCR using the surya library
         - pdf-text: use PyMuPDF library to recognize the table (using internal PDF text), if you know the PDF comes with text
         - paddleocr-vl: uses PaddleOCR-VL 1.5 vision-language model for document parsing and table extraction (free open source)
         """),
-        default="surya+paddle",
+        default="surya",
     )
     parser.add_argument(
         "--first-page",

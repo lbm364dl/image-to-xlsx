@@ -48,7 +48,7 @@ def methods_explanation():
             "AWS Textract: uses paid Amazon Web Services tool Textract for table recognition. Most reliable option but requires AWS credentials."
         )
         ui.item(
-            "Surya and Paddle OCR: uses free open source AI models for table recognition. More experimental and slower. The first time it takes even longer because it has to download the models."
+            "Surya OCR: uses free open source AI models (surya-ocr) for table structure recognition and text extraction. First run downloads models automatically."
         )
         ui.item(
             "PaddleOCR-VL 1.5: uses the PaddleOCR Vision-Language model for document parsing and table extraction. Free open source, supports 109 languages. First run downloads models automatically."
@@ -67,12 +67,12 @@ def method_selector(session):
     return ui.select(
         {
             "textract": "AWS Textract (commercial)",
-            "surya+paddle": "Surya and Paddle OCR (free open source)",
+            "surya": "Surya OCR (free open source)",
             "paddleocr-vl": "PaddleOCR-VL 1.5 (free open source)",
             "pdf-text": "No OCR, use text in PDF",
         },
         label="Extraction method",
-        value=session.options.get("method", "textract"),
+        value=session.options.get("method", "surya"),
         on_change=lambda e: session.toggle_option(e, "method"),
     ).classes("w-full")
 

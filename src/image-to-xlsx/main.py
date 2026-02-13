@@ -9,7 +9,7 @@ import shutil
 
 def run(
     document,
-    method="surya+paddle",
+    method="surya",
     unskew=0,
     binarize=0,
     nlp_postprocess=0,

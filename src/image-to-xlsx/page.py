@@ -28,21 +28,11 @@ def clear_gpu_memory():
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
 
-    # Clear cached surya/paddle models
+    # Clear cached surya predictors
     try:
         import pretrained
         pretrained.clear_all_models()
     except ImportError:
-        pass
-
-    # Clear module-level globals in table.py
-    try:
-        import table
-        table.pretrained = None
-        table.batch_text_detection = None
-        table.batch_table_recognition = None
-        table.assign_rows_columns = None
-    except (ImportError, AttributeError):
         pass
 
     gc.collect()
@@ -71,33 +61,6 @@ class Page:
         self.page = page
         self.page_num = page_num
         self.document = document
-        self.model = None
-        self.processor = None
-        self.det_model = None
-        self.det_processor = None
-        self.layout_model = None
-        self.layout_processor = None
-        self.ocr_pipeline = None
-
-    def set_models(
-        self,
-        model=None,
-        processor=None,
-        det_model=None,
-        det_processor=None,
-        layout_model=None,
-        layout_processor=None,
-        ocr_pipeline=None,
-    ):
-        import pretrained
-
-        self.model = model or pretrained.model()
-        self.processor = processor or pretrained.processor()
-        self.det_model = det_model or pretrained.det_model()
-        self.det_processor = det_processor or pretrained.det_processor()
-        self.layout_model = layout_model or pretrained.layout_model()
-        self.layout_processor = layout_processor or pretrained.layout_processor()
-        self.ocr_pipeline = ocr_pipeline or pretrained.ocr_pipeline()
 
     def rotate(self, delta=0.5, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
@@ -107,24 +70,17 @@ class Page:
         self.page = binarize(self.page, method, block_size, constant)
 
     def detect_tables(self):
-        from surya.detection import batch_text_detection
-        from surya.layout import batch_layout_detection
+        import pretrained
 
-        [line_prediction] = batch_text_detection(
-            [self.page], self.det_model, self.det_processor
-        )
-        [layout_prediction] = batch_layout_detection(
-            [self.page],
-            self.layout_model,
-            self.layout_processor,
-            [line_prediction],
-        )
+        lp = pretrained.layout_predictor()
+        layout_predictions = lp([self.page])
+        layout_prediction = layout_predictions[0]
 
         return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
 
     def process_page(self, **kwargs):
         get_page_tables_method = {
-            "surya+paddle": self.get_page_tables_surya_plus_paddle,
+            "surya": self.get_page_tables_surya,
             "pdf-text": self.get_page_tables_with_pdf_text,
             "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
@@ -161,10 +117,7 @@ class Page:
 
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
-    def get_page_tables_surya_plus_paddle(self, **kwargs):
-        import pretrained
-        self.set_models(**pretrained.all_models())
-
+    def get_page_tables_surya(self, **kwargs):
         if kwargs.get("unskew"):
             self.rotate(delta=0.5, limit=5)
 
@@ -177,18 +130,10 @@ class Page:
                 self.page,
                 self,
                 table.bbox,
-                self.model,
-                self.processor,
-                self.det_model,
-                self.det_processor,
-                self.ocr_pipeline,
             )
 
-            t.set_table_from_surya_paddle(
+            t.set_table_from_surya(
                 image_pad=kwargs.get("image_pad"),
-                heuristic_thresh=kwargs.get("heuristic_thresh"),
-                compute_prefix=kwargs.get("compute_prefix"),
-                show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
                 show_detected_boxes=kwargs.get("show_detected_boxes"),
             )
             tables.append(t)

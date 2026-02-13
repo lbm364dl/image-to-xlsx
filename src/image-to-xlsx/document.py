@@ -11,7 +11,7 @@ class Document:
         self,
         document,
         fixed_decimal_places=0,
-        method="surya+paddle",
+        method="surya",
     ):
         self.method = method
         self.fixed_decimal_places = fixed_decimal_places

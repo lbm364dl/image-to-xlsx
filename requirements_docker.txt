@@ -4,3 +4,5 @@ nicegui
 pymupdf
 paddlepaddle-gpu
 paddleocr[all]
+surya-ocr
+transformers>=4.56.1,<5

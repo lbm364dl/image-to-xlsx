@@ -1,6 +1,5 @@
 import numpy as np
 import cv2
-pretrained = None
 import re
 from utils import split_footnotes, get_cell_color
 from collections import defaultdict
@@ -12,9 +11,6 @@ from definitions import (
     AT_LEAST_TWO_NUMBERS,
 )
 from PIL import Image
-batch_text_detection = None
-batch_table_recognition = None
-assign_rows_columns = None
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import PatternFill, Border, Side
 from openpyxl.comments import Comment
@@ -26,108 +22,18 @@ class Table:
         whole_image,
         page,
         table_bbox,
-        model=None,
-        processor=None,
-        det_model=None,
-        det_processor=None,
-        ocr_pipeline=None,
     ):
         self.page = page
         self.footer_text = None
+        self.image = whole_image
+        self.table_bbox = table_bbox
 
         if page.document.method not in ("pdf-text", "paddleocr-vl"):
-            global pretrained, batch_text_detection, batch_table_recognition
-            if pretrained is None:
-                import pretrained as _pretrained
-                pretrained = _pretrained
-            if batch_text_detection is None or batch_table_recognition is None:
-                from surya.detection import batch_text_detection as _batch_text_detection
-                from surya.tables import batch_table_recognition as _batch_table_recognition
-                batch_text_detection = _batch_text_detection
-                batch_table_recognition = _batch_table_recognition
-            self.image = whole_image
             self.cropped_img = self.image.crop(table_bbox)
-            self.table_bbox = table_bbox
-            self.model = model or pretrained.model
-            self.processor = processor or pretrained.processor
-            self.det_model = det_model or pretrained.det_model
-            self.det_processor = det_processor or pretrained.det_processor
-            self.pipeline = ocr_pipeline or pretrained.ocr_pipeline
-        elif page.document.method == "paddleocr-vl":
-            self.image = whole_image
-            self.table_bbox = table_bbox
-
-    def reject_large_bboxes(self, bboxes, thresh=30):
-        return [tb for tb in bboxes if tb.bbox[3] - tb.bbox[1] <= thresh]
-
-    def recognize_structure(self, heuristic_thresh=0.8):
-        table_blocks = []
-
-        [det_result] = batch_text_detection(
-            [self.cropped_img], self.det_model, self.det_processor
-        )
-        self.det_result = det_result
-        det_result.bboxes = self.reject_large_bboxes(det_result.bboxes)
-
-        if table_blocks:
-            cell_bboxes = table_blocks
-        else:
-            cell_bboxes = [{"bbox": tb.bbox, "text": ""} for tb in det_result.bboxes]
-
-        self.table = {
-            "bbox": self.table_bbox,
-            "img": self.cropped_img,
-            "bboxes": cell_bboxes,
-        }
-
-        [table_pred] = batch_table_recognition(
-            [self.cropped_img], [cell_bboxes], self.model, self.processor
-        )
-
-        global assign_rows_columns
-        if assign_rows_columns is None:
-            from tabled.assignment import assign_rows_columns as _assign_rows_columns
-            assign_rows_columns = _assign_rows_columns
-        self.table["cells"] = assign_rows_columns(
-            table_pred, self.table["img"].size, heuristic_thresh
-        )
 
     def is_numeric_cell(self, text, threshold=0.6):
         numeric = sum("0" <= c <= "9" for c in text)
         return numeric >= threshold * len(text)
-
-    def get_cropped_cell_images(self, image_pad, compute_prefix, show_cropped_bboxes):
-        cropped_imgs = []
-        for cell in self.table["cells"][:compute_prefix]:
-            cropped_img = np.array(self.table["img"].crop(cell.bbox))
-            cropped_img = np.pad(
-                cropped_img,
-                ((image_pad, image_pad), (image_pad, image_pad), (0, 0)),
-                mode="constant",
-                constant_values=255,
-            )
-            if show_cropped_bboxes:
-                Image.fromarray(cropped_img).show()
-            cropped_imgs.append(cropped_img)
-
-        return cropped_imgs
-
-    def recognize_texts(self, image_pad, compute_prefix, show_cropped_bboxes):
-        self.table_data = defaultdict(lambda: defaultdict(list))
-
-        cropped_imgs = self.get_cropped_cell_images(
-            image_pad, compute_prefix, show_cropped_bboxes
-        )
-        output = self.pipeline.predict(cropped_imgs)
-
-        for cell, pred in zip(self.table["cells"], output):
-            row_ids, col_ids = cell.row_ids, cell.col_ids
-            row_id, col_id = row_ids[0], col_ids[0]
-
-            self.table_data[row_id][col_id] += [
-                {"text": text, "confidence": confidence * 100}
-                for text, confidence in zip(pred["rec_text"], pred["rec_score"])
-            ]
 
     def set_table_from_pdf_text(self, table):
         self.table_data = defaultdict(dict)
@@ -446,20 +352,73 @@ class Table:
                     {"text": cell_text.strip(), "confidence": None}
                 ]
 
-    def set_table_from_surya_paddle(
+    def set_table_from_surya(
         self,
         image_pad=100,
-        heuristic_thresh=0.8,
-        compute_prefix=10**9,
-        show_cropped_bboxes=False,
         show_detected_boxes=False,
     ):
-        self.recognize_structure(heuristic_thresh)
+        """Use surya's TableRecPredictor for structure and RecognitionPredictor for OCR."""
+        import pretrained
+
+        # 1. Detect table structure (rows, columns, cells)
+        table_rec = pretrained.table_rec_predictor()
+        [table_result] = table_rec([self.cropped_img])
 
         if show_detected_boxes:
-            self.visualize_table_bboxes()
+            self.visualize_bboxes(
+                self.cropped_img,
+                [cell.bbox for cell in table_result.cells],
+            )
 
-        self.recognize_texts(image_pad, compute_prefix, show_cropped_bboxes)
+        # 2. Crop each cell and run OCR
+        rec = pretrained.recognition_predictor()
+        det = pretrained.detection_predictor()
+
+        cell_images = []
+        cell_infos = []
+        for cell in table_result.cells:
+            cropped = self.cropped_img.crop(cell.bbox)
+            cropped_arr = np.array(cropped.convert("RGB"))
+            padded = np.pad(
+                cropped_arr,
+                ((image_pad, image_pad), (image_pad, image_pad), (0, 0)),
+                mode="constant",
+                constant_values=255,
+            )
+            cell_images.append(Image.fromarray(padded))
+            cell_infos.append(cell)
+
+        self.table_data = defaultdict(lambda: defaultdict(list))
+
+        if cell_images:
+            import torch
+
+            # Process in batches to avoid CUDA OOM errors
+            BATCH_SIZE = 8
+            ocr_results = []
+            for batch_start in range(0, len(cell_images), BATCH_SIZE):
+                batch_imgs = cell_images[batch_start:batch_start + BATCH_SIZE]
+                batch_results = rec(batch_imgs, det_predictor=det)
+                ocr_results.extend(batch_results)
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            for cell_info, ocr_result in zip(cell_infos, ocr_results):
+                row_id = cell_info.row_id
+                col_id = cell_info.col_id
+                text = " ".join(line.text for line in ocr_result.text_lines)
+                confidences = [
+                    line.confidence for line in ocr_result.text_lines
+                    if line.confidence is not None
+                ]
+                confidence = (
+                    sum(confidences) / len(confidences) * 100
+                    if confidences
+                    else None
+                )
+                self.table_data[row_id][col_id].append(
+                    {"text": text.strip(), "confidence": confidence}
+                )
 
     def nlp_postprocess(
         self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
@@ -485,8 +444,3 @@ class Table:
             )
 
         Image.fromarray(visualize_img).show()
-
-    def visualize_table_bboxes(self):
-        self.visualize_bboxes(
-            self.table["img"], [c["bbox"] for c in self.table["bboxes"]]
-        )
