@@ -16,6 +16,50 @@ from binarization import binarize
 from PIL import Image
 from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
+# Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
+_paddleocr_vl_pipeline = None
+
+
+def clear_gpu_memory():
+    """Release all cached GPU models/pipelines and free GPU memory."""
+    import gc
+
+    # Clear cached PaddleOCR-VL pipeline
+    global _paddleocr_vl_pipeline
+    _paddleocr_vl_pipeline = None
+
+    # Clear cached surya/paddle models
+    try:
+        import pretrained
+        pretrained.clear_all_models()
+    except ImportError:
+        pass
+
+    # Clear module-level globals in table.py
+    try:
+        import table
+        table.pretrained = None
+        table.batch_text_detection = None
+        table.batch_table_recognition = None
+        table.assign_rows_columns = None
+    except (ImportError, AttributeError):
+        pass
+
+    gc.collect()
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+
+    try:
+        import paddle
+        paddle.device.cuda.empty_cache()
+    except (ImportError, Exception):
+        pass
+
 
 class Page:
     def __init__(
@@ -118,6 +162,7 @@ class Page:
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
     def get_page_tables_surya_plus_paddle(self, **kwargs):
+        import pretrained
         self.set_models(**pretrained.all_models())
 
         if kwargs.get("unskew"):
@@ -209,7 +254,10 @@ class Page:
             import paddle
             device = "gpu:0" if paddle.device.cuda.device_count() > 0 else "cpu"
 
-        pipeline = PaddleOCRVL(device=device)
+        global _paddleocr_vl_pipeline
+        if _paddleocr_vl_pipeline is None:
+            _paddleocr_vl_pipeline = PaddleOCRVL(device=device)
+        pipeline = _paddleocr_vl_pipeline
 
         # Save the page image to a temp file for PaddleOCR-VL input
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:

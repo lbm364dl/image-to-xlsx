@@ -34,26 +34,30 @@ def run(
         method,
     )
 
-    for i, page in sorted(d.pages.items()):
-        print(f"    Processing page {i}")
-        p = Page(page, i, d)
-        p.process_page(
-            unskew=unskew,
-            binarize=binarize,
-            extend_rows=extend_rows,
-            nlp_postprocess=nlp_postprocess,
-            nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
-            text_language=text_language,
-            show_detected_boxes=show_detected_boxes,
-            compute_prefix=compute_prefix,
-            image_pad=image_pad,
-            heuristic_thresh=heuristic_thresh,
-            textract_response_pickle_file=textract_response_pickle_file,
-            remove_dots_and_commas=remove_dots_and_commas,
-            decimal_separator=decimal_separator,
-            thousands_separator=thousands_separator,
-            fix_num_misspellings=fix_num_misspellings,
-        )
+    try:
+        for i, page in sorted(d.pages.items()):
+            print(f"    Processing page {i}")
+            p = Page(page, i, d)
+            p.process_page(
+                unskew=unskew,
+                binarize=binarize,
+                extend_rows=extend_rows,
+                nlp_postprocess=nlp_postprocess,
+                nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
+                text_language=text_language,
+                show_detected_boxes=show_detected_boxes,
+                compute_prefix=compute_prefix,
+                image_pad=image_pad,
+                heuristic_thresh=heuristic_thresh,
+                textract_response_pickle_file=textract_response_pickle_file,
+                remove_dots_and_commas=remove_dots_and_commas,
+                decimal_separator=decimal_separator,
+                thousands_separator=thousands_separator,
+                fix_num_misspellings=fix_num_misspellings,
+            )
+    finally:
+        from page import clear_gpu_memory
+        clear_gpu_memory()
 
     return d.workbook, d.footers_workbook
 

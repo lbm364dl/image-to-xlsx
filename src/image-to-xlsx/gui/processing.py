@@ -65,6 +65,13 @@ def extract_tables(
                 "Unexpected error, try again or check command line error and contact developers"
             )
 
+    # Free GPU memory after extraction (important since cpu_bound reuses processes)
+    try:
+        from page import clear_gpu_memory
+        clear_gpu_memory()
+    except Exception:
+        pass
+
     return create_results_zip(results, options) if results else None
 
 
