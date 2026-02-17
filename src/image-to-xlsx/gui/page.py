@@ -60,9 +60,9 @@ def register_pages(manager, extraction_semaphore):
                 ui.notify("Nothing to process")
 
         async def handle_upload(e):
-            filename = getattr(e.file, "name", "uploaded_file")
-            content_type = getattr(e.file, "content_type", "")
-            read_result = e.file.read()
+            filename = getattr(e, "name", "uploaded_file")
+            content_type = getattr(e, "type", "")
+            read_result = e.content.read()
             if hasattr(read_result, "__await__"):
                 raw_content = await read_result
             else:
