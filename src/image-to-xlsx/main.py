@@ -26,6 +26,7 @@ def run(
     decimal_separator=".",
     thousands_separator=",",
     fix_num_misspellings=1,
+    dewarp=0,
     **kwargs,
 ):
     d = Document(
@@ -34,10 +35,21 @@ def run(
         method,
     )
 
+    dewarped_images = {}  # page_num -> PIL Image (if dewarp is enabled)
+
     try:
         for i, page in sorted(d.pages.items()):
             print(f"    Processing page {i}")
             p = Page(page, i, d)
+
+            if dewarp:
+                print(f"    Dewarping page {i}...")
+                p.dewarp()
+                dewarped_img = Page.get_last_dewarped_image()
+                if dewarped_img is not None:
+                    dewarped_images[i] = dewarped_img
+                Page.reset_last_dewarped_image()
+
             p.process_page(
                 unskew=unskew,
                 binarize=binarize,
@@ -59,7 +71,7 @@ def run(
         from page import clear_gpu_memory
         clear_gpu_memory()
 
-    return d.workbook, d.footers_workbook
+    return d.workbook, d.footers_workbook, dewarped_images
 
 
 def save_output(table_workbook, footers_workbook, output_dir, file_name):
@@ -96,7 +108,7 @@ if __name__ == "__main__":
                 "content": f.read(),
                 "pages": [(args.first_page, args.last_page)],
             }
-            table_workbook, footers_workbook = run(document, **vars(args))
+            table_workbook, footers_workbook, _dewarped = run(document, **vars(args))
             save_output(
                 table_workbook, footers_workbook, output_dir, relative_path.stem
             )

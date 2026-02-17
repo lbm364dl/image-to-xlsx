@@ -153,6 +153,14 @@ def option_checkboxes(method_option, session):
         ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl"))
 
         ui.checkbox(
+            "Dewarp document image before extraction (uses GeoTr AI model, "
+            "recommended for photos of curved/folded pages). "
+            "First run downloads model; dewarped images are saved in the results zip.",
+            on_change=lambda e: session.toggle_option(e, "dewarp"),
+            value=session.options.get("dewarp", False),
+        ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text",))
+
+        ui.checkbox(
             "Create one row for each text detected inside a cell instead of joining with a space. Only try this if you see that adjacent rows are mixed into a single row by mistake.",
             on_change=lambda e: session.toggle_option(e, "extend_rows"),
             value=session.options.get("extend_rows", False),

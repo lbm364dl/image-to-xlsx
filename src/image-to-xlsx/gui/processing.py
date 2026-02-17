@@ -44,13 +44,14 @@ def extract_tables(
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
-            table_workbook, footers_workbook = main.run(file, **options)
+            table_workbook, footers_workbook, dewarped_images = main.run(file, **options)
             results.append(
                 {
                     "table_workbook": table_workbook,
                     "footers_workbook": footers_workbook,
                     "name": file["name"],
                     "input_content": file["content"],
+                    "dewarped_images": dewarped_images,
                 }
             )
         except aws_region_errors:
@@ -77,6 +78,8 @@ def extract_tables(
 
 def create_results_zip(results, options):
     """Create a zip file containing all extraction results."""
+    from io import BytesIO as _BytesIO
+
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for result in results:
@@ -93,6 +96,17 @@ def create_results_zip(results, options):
                     f"{name}/{result['name']}",
                     result["input_content"],
                 )
+            # Save dewarped page images when dewarping was enabled
+            dewarped_images = result.get("dewarped_images", {})
+            if dewarped_images:
+                for page_num, pil_img in dewarped_images.items():
+                    img_buf = _BytesIO()
+                    pil_img.save(img_buf, format="PNG")
+                    img_buf.seek(0)
+                    zipf.writestr(
+                        f"{name}/dewarped/page_{page_num}.png",
+                        img_buf.read(),
+                    )
     buffer.seek(0)
     return buffer.read()
 

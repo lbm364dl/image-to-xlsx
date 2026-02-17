@@ -9,6 +9,7 @@ from definitions import INF
 DEFAULT_OPTIONS = {
     "method": "paddleocr-vl",
     "unskew": False,
+    "dewarp": False,
     "show-detected-boxes": False,
     "extend_rows": False,
     "remove_dots_and_commas": False,

@@ -18,6 +18,8 @@ from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 # Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
 _paddleocr_vl_pipeline = None
+# Last dewarped page image (stored so it can be included in the results zip)
+_last_dewarped_image = None
 
 
 def clear_gpu_memory():
@@ -28,6 +30,10 @@ def clear_gpu_memory():
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
 
+    # Clear dewarped image reference
+    global _last_dewarped_image
+    _last_dewarped_image = None
+
     # Clear cached surya predictors
     try:
         import pretrained
@@ -35,11 +41,12 @@ def clear_gpu_memory():
     except ImportError:
         pass
 
-    gc.collect()
-
-    try:
-        import torch
-        if torch.cuda.is_available():
+        # Clear dewarping model cache
+        try:
+            from dewarping.dewarp import clear_model_cache
+            clear_model_cache()
+        except ImportError:
+            pass
             torch.cuda.empty_cache()
     except ImportError:
         pass
@@ -61,6 +68,23 @@ class Page:
         self.page = page
         self.page_num = page_num
         self.document = document
+
+    def dewarp(self):
+        """Dewarp the page image using GeoTr (doc-matcher)."""
+        from dewarping import dewarp_image as _dewarp
+        global _last_dewarped_image
+        self.page = _dewarp(self.page)
+        _last_dewarped_image = self.page.copy()
+
+    @staticmethod
+    def get_last_dewarped_image():
+        """Return the most recently dewarped image (or None)."""
+        return _last_dewarped_image
+
+    @staticmethod
+    def reset_last_dewarped_image():
+        global _last_dewarped_image
+        _last_dewarped_image = None
 
     def rotate(self, delta=0.5, limit=5, custom_angle=None):
         _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
