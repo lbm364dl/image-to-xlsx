@@ -1,0 +1,11 @@
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu130/
+numpy<2.4
+nicegui
+pymupdf
+paddlepaddle-gpu
+paddleocr[all]
+transformers>=5.1.0
+einops
+gdown
+glmocr @ git+https://github.com/zai-org/GLM-OCR.git
+vllm

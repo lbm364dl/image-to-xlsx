@@ -60,13 +60,9 @@ def register_pages(manager, extraction_semaphore):
                 ui.notify("Nothing to process")
 
         async def handle_upload(e):
-            filename = getattr(e, "name", "uploaded_file")
-            content_type = getattr(e, "type", "")
-            read_result = e.content.read()
-            if hasattr(read_result, "__await__"):
-                raw_content = await read_result
-            else:
-                raw_content = read_result
+            filename = e.file.name
+            content_type = e.file.content_type
+            raw_content = await e.file.read()
 
             if raw_content is None:
                 ui.notify("Upload failed: could not read file contents.")
@@ -89,6 +85,7 @@ def register_pages(manager, extraction_semaphore):
             }
             session.uploaded_files_pages[filename] = [(1, INF)]
 
+
         def reset_uploaded_files(file_upload):
             session.uploaded_files.clear()
             session.uploaded_files_pages.clear()
@@ -105,6 +102,7 @@ def register_pages(manager, extraction_semaphore):
                 components.methods_explanation()
                 method_option = components.method_selector(session)
                 components.aws_credentials_card(method_option, session)
+                components.glm_ocr_config_card(method_option, session)
                 components.option_checkboxes(method_option, session)
                 file_upload = components.file_upload_input(on_upload=handle_upload)
                 components.uploaded_files_view(

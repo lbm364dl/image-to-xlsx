@@ -66,6 +66,7 @@ def run(
                 decimal_separator=decimal_separator,
                 thousands_separator=thousands_separator,
                 fix_num_misspellings=fix_num_misspellings,
+                **kwargs,
             )
     finally:
         from page import clear_gpu_memory

@@ -54,6 +54,11 @@ def methods_explanation():
             "PaddleOCR-VL 1.5: uses the PaddleOCR Vision-Language model for document parsing and table extraction. Free open source, supports 109 languages. First run downloads models automatically."
         )
         ui.item(
+            "GLM-OCR: uses the GLM-OCR multimodal model for document parsing and table extraction via API. "
+            "Requires a running GLM-OCR server (vLLM/SGLang/Ollama) or a Zhipu MaaS API key. "
+            "Excellent at complex tables, formulas, and multilingual documents."
+        )
+        ui.item(
             "PDF text: does not rely on AI models and instead uses information stored in the PDF. Only use if your PDF has embedded text, that is, if you can select and copy the contents of the table."
         )
 
@@ -69,6 +74,7 @@ def method_selector(session):
             "textract": "AWS Textract (commercial)",
             "surya": "Surya OCR (free open source)",
             "paddleocr-vl": "PaddleOCR-VL 1.5 (free open source)",
+            "glm-ocr": "GLM-OCR (API-based)",
             "pdf-text": "No OCR, use text in PDF",
         },
         label="Extraction method",
@@ -141,6 +147,47 @@ def aws_credentials_card(method_option, session):
             ).classes("w-full")
 
 
+def glm_ocr_config_card(method_option, session):
+    """Build the GLM-OCR configuration card."""
+    with (
+        ui.column()
+        .bind_visibility_from(method_option, "value", lambda v: v == "glm-ocr")
+        .classes("w-full")
+    ):
+        with ui.card().classes("w-full"):
+            ui.label("Configure GLM-OCR inference server")
+            ui.label(
+                "GLM-OCR requires a running inference server (vLLM, SGLang, or Ollama) "
+                "serving the zai-org/GLM-OCR model. The SDK runs layout detection locally "
+                "on GPU and sends cropped regions to the server for OCR."
+            ).classes("text-sm text-gray-500")
+            ui.input(
+                "Server host",
+                value=session.options.get("glm_ocr_host", "localhost"),
+                on_change=lambda e: session.toggle_option(e, "glm_ocr_host"),
+            ).classes("w-full")
+            ui.number(
+                "Server port",
+                value=session.options.get("glm_ocr_port", 8081),
+                on_change=lambda e: session.toggle_option(e, "glm_ocr_port"),
+                precision=0,
+                min=1,
+                max=65535,
+            ).classes("w-full")
+            ui.input(
+                "API Key (optional for self-hosted)",
+                value=session.options.get("glm_ocr_api_key", ""),
+                on_change=lambda e: session.toggle_option(e, "glm_ocr_api_key"),
+                password=True,
+                password_toggle_button=True,
+            ).classes("w-full")
+            ui.input(
+                "Model name",
+                value=session.options.get("glm_ocr_model", "glm-ocr"),
+                on_change=lambda e: session.toggle_option(e, "glm_ocr_model"),
+            ).classes("w-full")
+
+
 def option_checkboxes(method_option, session):
     """Build the options panel with all checkboxes and selectors."""
     with ui.column().classes(f"w-[{MAX_WIDTH}px]"):
@@ -150,7 +197,7 @@ def option_checkboxes(method_option, session):
             "Try to fix image rotation (can be very slow for large inputs)",
             on_change=lambda e: session.toggle_option(e, "unskew"),
             value=session.options.get("unskew", False),
-        ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl"))
+        ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl", "glm-ocr"))
 
         ui.checkbox(
             "Dewarp document image before extraction (uses GeoTr AI model, "

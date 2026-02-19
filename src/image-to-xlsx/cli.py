@@ -14,12 +14,13 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices={"surya", "pdf-text", "textract", "textract-pickle-debug", "paddleocr-vl"},
+        choices={"surya", "pdf-text", "textract", "textract-pickle-debug", "paddleocr-vl", "glm-ocr"},
         help=textwrap.dedent("""\
         Method to use for table recognition. Default surya. Methods:
         - surya: open source AI table recognition and OCR using the surya library
         - pdf-text: use PyMuPDF library to recognize the table (using internal PDF text), if you know the PDF comes with text
         - paddleocr-vl: uses PaddleOCR-VL 1.5 vision-language model for document parsing and table extraction (free open source)
+        - glm-ocr: uses GLM-OCR multimodal model for document parsing and table extraction via OpenAI-compatible API (requires a running GLM-OCR server or Zhipu MaaS API key)
         """),
         default="surya",
     )
@@ -147,6 +148,30 @@ def parse_args():
         choices={0, 1},
         help="Dewarp document images before extraction using GeoTr AI model (recommended for photos of curved/folded pages). Dewarped images are saved alongside results. First run downloads the model. Default 0",
         default=0,
+    )
+    parser.add_argument(
+        "--glm-ocr-host",
+        type=str,
+        help="GLM-OCR inference server hostname. Default localhost",
+        default="localhost",
+    )
+    parser.add_argument(
+        "--glm-ocr-port",
+        type=int,
+        help="GLM-OCR inference server port. Default 8080",
+        default=8080,
+    )
+    parser.add_argument(
+        "--glm-ocr-api-key",
+        type=str,
+        help="API key for GLM-OCR service (optional for self-hosted).",
+        default=None,
+    )
+    parser.add_argument(
+        "--glm-ocr-model",
+        type=str,
+        help="Model name for GLM-OCR API requests. Default glm-ocr",
+        default="glm-ocr",
     )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))
