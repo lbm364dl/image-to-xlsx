@@ -18,6 +18,8 @@ from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 # Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
 _paddleocr_vl_pipeline = None
+# Cached PP-StructureV3 pipeline (loaded once, reused across pages)
+_pp_structurev3_pipeline = None
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
@@ -29,6 +31,10 @@ def clear_gpu_memory():
     # Clear cached PaddleOCR-VL pipeline
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
+
+    # Clear cached PP-StructureV3 pipeline
+    global _pp_structurev3_pipeline
+    _pp_structurev3_pipeline = None
 
     # Clear dewarped image reference
     global _last_dewarped_image
@@ -109,6 +115,7 @@ class Page:
             "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
             "paddleocr-vl": self.get_page_tables_paddleocr_vl,
+            "pp-structurev3": self.get_page_tables_pp_structurev3,
         }
 
         tables = get_page_tables_method[self.document.method](**kwargs)
@@ -254,6 +261,69 @@ class Page:
                         t.set_table_from_paddleocr_vl_markdown(markdown_content)
                         tables.append(t)
 
+            return tables
+        finally:
+            os.unlink(tmp_path)
+
+    def get_page_tables_pp_structurev3(self, **kwargs):
+        """Extract tables using PaddlePaddle PP-StructureV3 pipeline.
+
+        PP-StructureV3 uses specialised models for layout detection, table
+        structure recognition and OCR.  Its output format (parsing_res_list
+        with block_label / block_content) is the same as PaddleOCR-VL, so we
+        reuse the same HTML/markdown table parser.
+
+        To toggle orientation classification or document unwarping, edit the
+        PPStructureV3() constructor below (use_doc_orientation_classify,
+        use_doc_unwarping).
+        """
+        import tempfile
+        from paddleocr import PPStructureV3
+
+        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
+        device = kwargs.get("paddleocr_vl_device")
+        if device is None:
+            import paddle
+            device = "gpu:0" if paddle.device.cuda.device_count() > 0 else "cpu"
+
+        global _pp_structurev3_pipeline
+        if _pp_structurev3_pipeline is None:
+            _pp_structurev3_pipeline = PPStructureV3(
+                device=device,
+                # Change these to True if you want automatic orientation
+                # correction or document unwarping (slower but may help
+                # with rotated / curved page images).
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+            )
+        pipeline = _pp_structurev3_pipeline
+
+        # Save the page image to a temp file for PP-StructureV3 input
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+            if isinstance(self.page, Image.Image):
+                self.page.save(tmp_path)
+            else:
+                Image.fromarray(np.array(self.page)).save(tmp_path)
+
+        try:
+            output = pipeline.predict(tmp_path)
+            tables = []
+            for res in output:
+                res_json = res.json["res"]
+                parsing_res_list = res_json.get("parsing_res_list", [])
+                for block in parsing_res_list:
+                    if block.get("block_label") == "table":
+                        content = block.get("block_content", "")
+                        if not content.strip():
+                            continue
+                        bbox = block.get("block_bbox", [0, 0, 0, 0])
+                        if hasattr(bbox, "tolist"):
+                            bbox = bbox.tolist()
+                        t = Table(self.page, self, bbox)
+                        t.set_table_from_paddleocr_vl_markdown(content)
+                        tables.append(t)
             return tables
         finally:
             os.unlink(tmp_path)

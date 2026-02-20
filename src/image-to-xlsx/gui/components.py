@@ -54,6 +54,9 @@ def methods_explanation():
             "PaddleOCR-VL 1.5: uses the PaddleOCR Vision-Language model for document parsing and table extraction. Free open source, supports 109 languages. First run downloads models automatically."
         )
         ui.item(
+            "PP-StructureV3: uses PaddlePaddle's document parsing pipeline with layout detection and specialised table structure recognition. Free open source, excels at complex table layouts. First run downloads models automatically."
+        )
+        ui.item(
             "PDF text: does not rely on AI models and instead uses information stored in the PDF. Only use if your PDF has embedded text, that is, if you can select and copy the contents of the table."
         )
 
@@ -69,6 +72,7 @@ def method_selector(session):
             "textract": "AWS Textract (commercial)",
             "surya": "Surya OCR (free open source)",
             "paddleocr-vl": "PaddleOCR-VL 1.5 (free open source)",
+            "pp-structurev3": "PP-StructureV3 (free open source)",
             "pdf-text": "No OCR, use text in PDF",
         },
         label="Extraction method",
@@ -150,7 +154,7 @@ def option_checkboxes(method_option, session):
             "Try to fix image rotation (can be very slow for large inputs)",
             on_change=lambda e: session.toggle_option(e, "unskew"),
             value=session.options.get("unskew", False),
-        ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl"))
+        ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl", "pp-structurev3"))
 
         ui.checkbox(
             "Dewarp document image before extraction (uses GeoTr AI model, "

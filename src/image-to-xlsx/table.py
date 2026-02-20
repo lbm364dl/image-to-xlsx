@@ -28,7 +28,7 @@ class Table:
         self.image = whole_image
         self.table_bbox = table_bbox
 
-        if page.document.method not in ("pdf-text", "paddleocr-vl"):
+        if page.document.method not in ("pdf-text", "paddleocr-vl", "pp-structurev3"):
             self.cropped_img = self.image.crop(table_bbox)
 
     def is_numeric_cell(self, text, threshold=0.6):
@@ -287,10 +287,12 @@ class Table:
             class _TableHTMLParser(HTMLParser):
                 def __init__(self):
                     super().__init__()
-                    self.rows = []
-                    self._current_row = None
+                    self.rows = []            # final grid (list of lists)
+                    self._current_row = []    # cells collected for current <tr>
                     self._in_cell = False
                     self._cell_buf = []
+                    self._cell_attrs = {}     # colspan / rowspan for current cell
+                    self._rowspan_carry = {}  # col_idx -> (remaining_rows, text)
 
                 def handle_starttag(self, tag, attrs):
                     if tag == "tr":
@@ -298,16 +300,62 @@ class Table:
                     elif tag in ("td", "th"):
                         self._in_cell = True
                         self._cell_buf = []
+                        self._cell_attrs = dict(attrs)
 
                 def handle_endtag(self, tag):
                     if tag in ("td", "th") and self._in_cell:
                         cell_text = "".join(self._cell_buf).strip()
-                        self._current_row.append(cell_text)
+                        colspan = int(self._cell_attrs.get("colspan", 1))
+                        rowspan = int(self._cell_attrs.get("rowspan", 1))
+                        self._current_row.append((cell_text, colspan, rowspan))
                         self._in_cell = False
                         self._cell_buf = []
                     elif tag == "tr" and self._current_row is not None:
-                        if self._current_row:
-                            self.rows.append(self._current_row)
+                        # Build the actual grid row, inserting rowspan placeholders
+                        grid_row = []
+                        col_idx = 0
+                        cell_iter = iter(self._current_row)
+                        next_cell = next(cell_iter, None)
+                        while next_cell is not None or col_idx in self._rowspan_carry:
+                            # Fill any rowspan carry-overs first
+                            while col_idx in self._rowspan_carry:
+                                carry_text, remaining = self._rowspan_carry[col_idx]
+                                grid_row.append("")
+                                if remaining <= 1:
+                                    del self._rowspan_carry[col_idx]
+                                else:
+                                    self._rowspan_carry[col_idx] = (carry_text, remaining - 1)
+                                col_idx += 1
+                            if next_cell is None:
+                                break
+                            cell_text, colspan, rowspan = next_cell
+                            for c in range(colspan):
+                                actual_col = col_idx + c
+                                # Skip columns occupied by rowspan carry-overs
+                                while actual_col in self._rowspan_carry:
+                                    grid_row.append("")
+                                    carry_text, remaining = self._rowspan_carry[actual_col]
+                                    if remaining <= 1:
+                                        del self._rowspan_carry[actual_col]
+                                    else:
+                                        self._rowspan_carry[actual_col] = (carry_text, remaining - 1)
+                                    actual_col += 1
+                                grid_row.append(cell_text if c == 0 else "")
+                                if rowspan > 1:
+                                    self._rowspan_carry[actual_col] = (cell_text if c == 0 else "", rowspan - 1)
+                            col_idx = len(grid_row)
+                            next_cell = next(cell_iter, None)
+                        # Drain any remaining rowspan carry-overs beyond last cell
+                        while col_idx in self._rowspan_carry:
+                            carry_text, remaining = self._rowspan_carry[col_idx]
+                            grid_row.append("")
+                            if remaining <= 1:
+                                del self._rowspan_carry[col_idx]
+                            else:
+                                self._rowspan_carry[col_idx] = (carry_text, remaining - 1)
+                            col_idx += 1
+                        if grid_row:
+                            self.rows.append(grid_row)
                         self._current_row = None
 
                 def handle_data(self, data):
@@ -348,8 +396,15 @@ class Table:
 
         for row_idx, row in enumerate(rows):
             for col_idx, cell_text in enumerate(row):
+                text = cell_text.strip()
+                # Store each word as a separate part (like Textract stores
+                # individual words).  This lets extend_rows split cells that
+                # contain multiple space-separated values (e.g. "1952 1953
+                # 1954") into separate rows.  When extend_rows is OFF,
+                # join_cell_parts will rejoin them with spaces (same result).
+                words = text.split() if text else [""]
                 self.table_data[row_idx][col_idx] = [
-                    {"text": cell_text.strip(), "confidence": None}
+                    {"text": w, "confidence": None} for w in words
                 ]
 
     def set_table_from_surya(
