@@ -153,6 +153,12 @@ def option_checkboxes(method_option, session):
         ).bind_visibility_from(method_option, "value", lambda v: v not in ("pdf-text", "paddleocr-vl"))
 
         ui.checkbox(
+            "Run secondary OCR pass for cell confidence coloring (slower, doubles inference time)",
+            on_change=lambda e: session.toggle_option(e, "use_ocr_confidence"),
+            value=session.options.get("use_ocr_confidence", False),
+        ).bind_visibility_from(method_option, "value", lambda v: v == "paddleocr-vl")
+
+        ui.checkbox(
             "Dewarp document image before extraction (uses GeoTr AI model, "
             "recommended for photos of curved/folded pages). "
             "First run downloads model; dewarped images are saved in the results zip.",

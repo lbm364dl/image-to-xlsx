@@ -148,5 +148,12 @@ def parse_args():
         help="Dewarp document images before extraction using GeoTr AI model (recommended for photos of curved/folded pages). Dewarped images are saved alongside results. First run downloads the model. Default 0",
         default=0,
     )
+    parser.add_argument(
+        "--use-ocr-confidence",
+        type=int,
+        choices={0, 1},
+        help="Run a secondary OCR pass (PP-OCRv5) to add confidence coloring when using paddleocr-vl. Doubles inference time. Default 0",
+        default=0,
+    )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

@@ -18,6 +18,8 @@ from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 # Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
 _paddleocr_vl_pipeline = None
+# Cached standalone OCR engine for confidence scoring
+_paddleocr_ocr_engine = None
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
@@ -29,6 +31,10 @@ def clear_gpu_memory():
     # Clear cached PaddleOCR-VL pipeline
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
+
+    # Clear cached OCR engine
+    global _paddleocr_ocr_engine
+    _paddleocr_ocr_engine = None
 
     # Clear dewarped image reference
     global _last_dewarped_image
@@ -212,6 +218,42 @@ class Page:
             FeatureTypes=["TABLES"],
         )
 
+    @staticmethod
+    def _run_ocr_for_confidence(image):
+        """Run standalone PP-OCRv5 OCR on an image and return word-level results.
+
+        Returns a list of dicts sorted in reading order (top→bottom, left→right):
+            [{"text": str, "bbox": [x1,y1,x2,y2], "confidence": float}, ...]
+        """
+        from paddleocr import PaddleOCR
+
+        global _paddleocr_ocr_engine
+        if _paddleocr_ocr_engine is None:
+            _paddleocr_ocr_engine = PaddleOCR(lang="en")
+        engine = _paddleocr_ocr_engine
+
+        result = engine.predict(np.array(image))
+        if not result:
+            return []
+
+        res_json = result[0].json["res"]
+        rec_texts = res_json.get("rec_texts", [])
+        rec_scores = res_json.get("rec_scores", [])
+        rec_boxes = res_json.get("rec_boxes", [])
+
+        words = []
+        for text, score, bbox in zip(rec_texts, rec_scores, rec_boxes):
+            # bbox is [x1, y1, x2, y2]
+            words.append({
+                "text": text.strip(),
+                "bbox": bbox,
+                "confidence": score * 100,  # normalise to 0-100 scale
+            })
+
+        # Sort in reading order: top-to-bottom, then left-to-right
+        words.sort(key=lambda w: (w["bbox"][1], w["bbox"][0]))
+        return words
+
     def get_page_tables_paddleocr_vl(self, **kwargs):
         import tempfile
         from paddleocr import PaddleOCRVL
@@ -253,6 +295,12 @@ class Page:
                         t = Table(self.page, self, bbox)
                         t.set_table_from_paddleocr_vl_markdown(markdown_content)
                         tables.append(t)
+
+            # Optionally enrich cells with OCR confidence scores
+            if kwargs.get("use_ocr_confidence") and tables:
+                ocr_words = self._run_ocr_for_confidence(self.page)
+                for t in tables:
+                    t.enrich_with_ocr_confidence(ocr_words)
 
             return tables
         finally:

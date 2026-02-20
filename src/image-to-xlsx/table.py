@@ -420,6 +420,51 @@ class Table:
                     {"text": text.strip(), "confidence": confidence}
                 )
 
+    def enrich_with_ocr_confidence(self, ocr_words):
+        """Match OCR words to table cells by fuzzy text matching, assigning confidence.
+
+        Args:
+            ocr_words: list of {"text": str, "bbox": [x1,y1,x2,y2], "confidence": float}
+                       sorted in reading order (top-to-bottom, left-to-right).
+        """
+        from difflib import SequenceMatcher
+
+        if not ocr_words:
+            return
+
+        # Build a consumed-flags array so we greedily consume each OCR word once
+        available = list(range(len(ocr_words)))
+
+        # Walk cells in reading order (row-major)
+        for row_idx in sorted(self.table_data.keys()):
+            for col_idx in sorted(self.table_data[row_idx].keys()):
+                parts = self.table_data[row_idx][col_idx]
+                for part in parts:
+                    if not part["text"].strip():
+                        continue
+
+                    # Find best fuzzy match among available OCR words
+                    best_idx = None
+                    best_ratio = 0.0
+                    for avail_pos, ocr_idx in enumerate(available):
+                        ocr_text = ocr_words[ocr_idx]["text"]
+                        ratio = SequenceMatcher(
+                            None, part["text"].lower(), ocr_text.lower()
+                        ).ratio()
+                        if ratio > best_ratio:
+                            best_ratio = ratio
+                            best_idx = avail_pos
+                        # Perfect match — stop early
+                        if ratio == 1.0:
+                            break
+
+                    # Accept match if similarity is above threshold
+                    if best_idx is not None and best_ratio >= 0.5:
+                        matched_ocr = ocr_words[available[best_idx]]
+                        part["confidence"] = matched_ocr["confidence"]
+                        # Remove from available pool
+                        available.pop(best_idx)
+
     def nlp_postprocess(
         self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None
     ):
