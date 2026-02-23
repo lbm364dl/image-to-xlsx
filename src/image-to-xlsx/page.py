@@ -123,27 +123,44 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            table_matrix = table.as_clean_matrix(kwargs.get("remove_dots_and_commas"))
-            table_matrix = table.overwrite_seminumeric_cells_confidence(
-                table_matrix,
-                kwargs.get("decimal_separator"),
-                kwargs.get("thousands_separator"),
-                kwargs.get("fix_num_misspellings"),
+            is_vl = self.document.method == "paddleocr-vl"
+
+            table_matrix = table.as_clean_matrix(
+                remove_dots_and_commas=False if is_vl else kwargs.get("remove_dots_and_commas")
             )
 
-            if kwargs.get("nlp_postprocess"):
-                table_matrix = table.nlp_postprocess(
+            if is_vl:
+                # PaddleOCR-VL: trust the model output, just try to parse
+                # each cell as a float. No separator stripping or misspelling
+                # substitution — the VL model already "understands" the numbers.
+                for row in table_matrix:
+                    for col in row:
+                        text = col["text"].strip()
+                        try:
+                            col["text"] = float(text)
+                        except ValueError:
+                            pass
+            else:
+                table_matrix = table.overwrite_seminumeric_cells_confidence(
                     table_matrix,
-                    kwargs.get("text_language"),
-                    kwargs.get("nlp_postprocess_prompt_file"),
+                    kwargs.get("decimal_separator"),
+                    kwargs.get("thousands_separator"),
+                    kwargs.get("fix_num_misspellings"),
                 )
 
-            table_matrix = table.maybe_parse_numeric_cells(
-                table_matrix,
-                kwargs.get("decimal_separator"),
-                kwargs.get("thousands_separator"),
-                kwargs.get("fix_num_misspellings"),
-            )
+                if kwargs.get("nlp_postprocess"):
+                    table_matrix = table.nlp_postprocess(
+                        table_matrix,
+                        kwargs.get("text_language"),
+                        kwargs.get("nlp_postprocess_prompt_file"),
+                    )
+
+                table_matrix = table.maybe_parse_numeric_cells(
+                    table_matrix,
+                    kwargs.get("decimal_separator"),
+                    kwargs.get("thousands_separator"),
+                    kwargs.get("fix_num_misspellings"),
+                )
 
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
@@ -289,6 +306,7 @@ class Page:
                         markdown_content = block.get("block_content", "")
                         if not markdown_content.strip():
                             continue
+                        print(f"[DEBUG PaddleOCR-VL raw markdown]:\n{markdown_content}\n")
                         bbox = block.get("block_bbox", [0, 0, 0, 0])
                         if hasattr(bbox, "tolist"):
                             bbox = bbox.tolist()

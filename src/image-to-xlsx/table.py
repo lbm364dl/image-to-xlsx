@@ -153,8 +153,9 @@ class Table:
             [cell_part["confidence"] for cell_part in cell if cell_part["confidence"] is not None]
         )
         confidence = conf_arr.mean() if conf_arr.size > 0 else None
+        joined = " ".join(texts)
         return {
-            "text": " ".join(texts),
+            "text": joined,
             "confidence": confidence if confidence is not None and not np.isnan(confidence) else None,
         }
 
@@ -247,10 +248,24 @@ class Table:
         if not self.is_numeric_cell(text):
             return text, NOT_NUMBER
 
+        # Heuristic: if the thousands_separator appears exactly once AND is
+        # followed by 1 or 2 digits (not 3), it was almost certainly output by
+        # the OCR/VL model as a decimal point rather than a thousands grouping
+        # mark (which always groups digits in sets of 3, e.g. "1,234").
+        # Treat it as the decimal separator in that case.
+        effective_decimal = decimal_separator
+        if thousands_separator and text.count(thousands_separator) == 1:
+            idx = text.rfind(thousands_separator)
+            digits_right = re.sub(r"[^0-9]", "", text[idx + 1:])
+            if len(digits_right) != 3:  # 1, 2 or 4+ → not a real thousands group
+                # Swap roles just for this cell
+                effective_decimal = thousands_separator
+                thousands_separator = ""  # nothing to strip
+
         text = text.replace(thousands_separator, "")
-        if decimal_separator == ",":
+        if effective_decimal == ",":
             one_number = cell["cnt_commas"] <= 1
-            text = text.replace(decimal_separator, ".")
+            text = text.replace(effective_decimal, ".")
         else:
             one_number = cell["cnt_dots"] <= 1
 
@@ -280,6 +295,10 @@ class Table:
 
         Supports HTML tables ("<table>...") and markdown pipe tables.
         """
+        if "206" in markdown_text:
+            idx = markdown_text.find("206")
+            print(f"  [DEBUG RAW MARKDOWN] snippet containing 206: {markdown_text[max(0, idx-10):min(len(markdown_text), idx+15)]!r}")
+
         from html.parser import HTMLParser
         import html
 

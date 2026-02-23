@@ -172,57 +172,61 @@ def option_checkboxes(method_option, session):
             value=session.options.get("extend_rows", False),
         )
 
-        ui.checkbox(
-            "Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc...",
-            on_change=lambda e: session.toggle_option(e, "fix_num_misspellings"),
-            value=session.options.get("fix_num_misspellings", True),
+        non_vl_options = ui.column().bind_visibility_from(
+            method_option, "value", lambda v: v != "paddleocr-vl"
         )
-        remove_dots_and_commas = ui.checkbox(
-            "Remove all commas and dots from cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
-            on_change=lambda e: session.toggle_option(e, "remove_dots_and_commas"),
-            value=session.options.get("remove_dots_and_commas", False),
-        )
-        with ui.row(align_items="center").bind_visibility_from(
-            remove_dots_and_commas, "value"
-        ):
-            ui.number(
-                "Decimal places",
-                placeholder="0",
-                on_change=lambda e: session.toggle_option(e, "fixed_decimal_places"),
-                precision=0,
-                min=0,
+        with non_vl_options:
+            ui.checkbox(
+                "Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc...",
+                on_change=lambda e: session.toggle_option(e, "fix_num_misspellings"),
+                value=session.options.get("fix_num_misspellings", True),
             )
-            ui.label(
-                "Forcefully write a decimal point this number of places to the left of the last digit in numeric cells. "
-            ).classes("w-1/2")
+            remove_dots_and_commas = ui.checkbox(
+                "Remove all commas and dots from cells. Try this if the OCR scanning struggles differentiating between commas and dots and/or you want a fixed number of decimal places.",
+                on_change=lambda e: session.toggle_option(e, "remove_dots_and_commas"),
+                value=session.options.get("remove_dots_and_commas", False),
+            )
+            with ui.row(align_items="center").bind_visibility_from(
+                remove_dots_and_commas, "value"
+            ):
+                ui.number(
+                    "Decimal places",
+                    placeholder="0",
+                    on_change=lambda e: session.toggle_option(e, "fixed_decimal_places"),
+                    precision=0,
+                    min=0,
+                )
+                ui.label(
+                    "Forcefully write a decimal point this number of places to the left of the last digit in numeric cells. "
+                ).classes("w-1/2")
 
-        with ui.column().bind_visibility_from(
-            remove_dots_and_commas, "value", lambda v: not v
-        ):
-            with ui.row(align_items="center"):
-                ui.select(
-                    {
-                        ",": "Comma (,)",
-                        ".": "Dot (.)",
-                    },
-                    value=session.options.get("thousands_separator", ","),
-                    on_change=lambda e: session.toggle_option(e, "thousands_separator"),
-                ).classes("w-[20%]")
-                ui.label(
-                    " Thousands separator (will be ignored when trying to convert numeric cells) "
-                ).classes("w-[50%]")
-            with ui.row(align_items="center"):
-                ui.select(
-                    {
-                        ".": "Dot (.)",
-                        ",": "Comma (,)",
-                    },
-                    value=session.options.get("decimal_separator", "."),
-                    on_change=lambda e: session.toggle_option(e, "decimal_separator"),
-                ).classes("w-[20%]")
-                ui.label(
-                    "Decimal separator (will be used as decimal point when trying to convert numeric cells)"
-                ).classes("w-[50%]")
+            with ui.column().bind_visibility_from(
+                remove_dots_and_commas, "value", lambda v: not v
+            ):
+                with ui.row(align_items="center"):
+                    ui.select(
+                        {
+                            ",": "Comma (,)",
+                            ".": "Dot (.)",
+                        },
+                        value=session.options.get("thousands_separator", ","),
+                        on_change=lambda e: session.toggle_option(e, "thousands_separator"),
+                    ).classes("w-[20%]")
+                    ui.label(
+                        " Thousands separator (will be ignored when trying to convert numeric cells) "
+                    ).classes("w-[50%]")
+                with ui.row(align_items="center"):
+                    ui.select(
+                        {
+                            ".": "Dot (.)",
+                            ",": "Comma (,)",
+                        },
+                        value=session.options.get("decimal_separator", "."),
+                        on_change=lambda e: session.toggle_option(e, "decimal_separator"),
+                    ).classes("w-[20%]")
+                    ui.label(
+                        "Decimal separator (will be used as decimal point when trying to convert numeric cells)"
+                    ).classes("w-[50%]")
 
 
 def file_upload_input(on_upload):
