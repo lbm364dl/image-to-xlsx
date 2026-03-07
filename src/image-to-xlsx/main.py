@@ -3,8 +3,11 @@ from page import Page
 from cli import parse_args
 from utils import get_document_paths, save_workbook
 from definitions import INF
-import os
 import shutil
+
+
+class ProcessingCancelled(Exception):
+    pass
 
 
 def run(
@@ -26,6 +29,7 @@ def run(
     decimal_separator=".",
     thousands_separator=",",
     fix_num_misspellings=1,
+    stop_event=None,
     **kwargs,
 ):
     d = Document(
@@ -35,6 +39,8 @@ def run(
     )
 
     for i, page in sorted(d.pages.items()):
+        if stop_event and stop_event.is_set():
+            raise ProcessingCancelled("Processing was stopped by user request")
         print(f"    Processing page {i}")
         p = Page(page, i, d)
         p.process_page(
@@ -53,16 +59,20 @@ def run(
             decimal_separator=decimal_separator,
             thousands_separator=thousands_separator,
             fix_num_misspellings=fix_num_misspellings,
+            stop_event=stop_event,
         )
+
+        if stop_event and stop_event.is_set():
+            raise ProcessingCancelled("Processing was stopped by user request")
 
     return d.workbook, d.footers_workbook
 
 
-def save_output(table_workbook, footers_workbook, output_dir, file_name):
+def save_output(table_workbook, footers_workbook, output_dir, file_name, source_path):
     output_dir.mkdir(parents=True, exist_ok=True)
     output_xlsx_path = output_dir / f"{file_name}.xlsx"
     save_workbook(table_workbook, output_xlsx_path)
-    shutil.copy(real_path, output_dir)
+    shutil.copy(source_path, output_dir)
     footers_xlsx_path = output_dir / f"footers_{file_name}.xlsx"
     save_workbook(footers_workbook, footers_xlsx_path)
 
@@ -70,23 +80,21 @@ def save_output(table_workbook, footers_workbook, output_dir, file_name):
 if __name__ == "__main__":
     args = parse_args()
 
-    from document import Document
-    from page import Page
-
     root_dir_path, relative_paths = get_document_paths(args.input_path)
+
+    if not relative_paths:
+        print("No supported files found to process")
 
     for relative_path in relative_paths:
         print(f"Processing document {relative_path}")
-        output_dir = (
-            root_dir_path / "results" / relative_path
-        ).parent / relative_path.stem
+        source_path = root_dir_path / relative_path
+        output_dir = (root_dir_path / "results" / relative_path).parent / relative_path.stem
 
-        if not args.overwrite_existing_result and os.path.isdir(output_dir):
+        if not args.overwrite_existing_result and output_dir.is_dir():
             print("Skipping already processed document")
             continue
 
-        real_path = os.path.join(root_dir_path, relative_path)
-        with open(real_path, "rb") as f:
+        with source_path.open("rb") as f:
             document = {
                 "name": str(relative_path),
                 "content": f.read(),
@@ -94,5 +102,9 @@ if __name__ == "__main__":
             }
             table_workbook, footers_workbook = run(document, **vars(args))
             save_output(
-                table_workbook, footers_workbook, output_dir, relative_path.stem
+                table_workbook,
+                footers_workbook,
+                output_dir,
+                relative_path.stem,
+                source_path,
             )

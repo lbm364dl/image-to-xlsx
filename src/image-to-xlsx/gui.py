@@ -10,24 +10,43 @@ CHUNK_SIZE = 1024 * 1024
 
 
 def extract_tables(
-    uploaded_files, uploaded_files_pages, exception_queue, queue, options
+    uploaded_files,
+    uploaded_files_pages,
+    exception_queue,
+    queue,
+    options,
+    cancel_event,
 ):
     import botocore.exceptions as aws_exceptions
     import traceback
     import main
 
     results = []
-    total_files = len(uploaded_files)
-    for i, (file, pages) in enumerate(
-        zip(uploaded_files.values(), uploaded_files_pages.values())
-    ):
+    file_names = list(uploaded_files.keys())
+    total_files = len(file_names)
+    for i, file_name in enumerate(file_names):
+        file = uploaded_files[file_name]
+        pages = uploaded_files_pages.get(file_name, [(1, options.get("last_page", 10**9))])
+        if cancel_event.is_set():
+            queue.put_nowait("Processing stopped")
+            return {"results_zip": None, "cancelled": True}
+
         queue.put_nowait(
             f"({i + 1} out of {total_files}) Processing file {file['name']}"
         )
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
-            table_workbook, footers_workbook = main.run(file, **options)
+            table_workbook, footers_workbook = main.run(
+                file,
+                stop_event=cancel_event,
+                **options,
+            )
+
+            if cancel_event.is_set():
+                queue.put_nowait("Processing stopped")
+                return {"results_zip": None, "cancelled": True}
+
             results.append(
                 {
                     "table_workbook": table_workbook,
@@ -45,30 +64,42 @@ def extract_tables(
         except (aws_exceptions.ClientError, aws_exceptions.NoCredentialsError):
             exception_queue.put_nowait("Wrong AWS client credentials. Try to fix them.")
             continue
+        except main.ProcessingCancelled:
+            queue.put_nowait("Processing stopped")
+            return {"results_zip": None, "cancelled": True}
         except Exception:
             traceback.print_exc()
             exception_queue.put_nowait(
                 "Unexpected error, try again or check command line error and contact developers"
             )
 
-    return create_results_zip(results, options) if results else None
+    if cancel_event.is_set():
+        queue.put_nowait("Processing stopped")
+        return {"results_zip": None, "cancelled": True}
+
+    return {
+        "results_zip": create_results_zip(results, options) if results else None,
+        "cancelled": False,
+    }
 
 
 def create_results_zip(results, options):
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for result in results:
-            name = Path(result["name"]).stem
+            relative_name = Path(result["name"])
+            output_base = relative_name.parent / relative_name.stem
             zipf.writestr(
-                f"{name}/{name}.xlsx", workbook_to_bytes(result["table_workbook"])
+                str(output_base / f"{relative_name.stem}.xlsx"),
+                workbook_to_bytes(result["table_workbook"]),
             )
             zipf.writestr(
-                f"{name}/footers_{name}.xlsx",
+                str(output_base / f"footers_{relative_name.stem}.xlsx"),
                 workbook_to_bytes(result["footers_workbook"]),
             )
             if options.get("include_input_files_in_output"):
                 zipf.writestr(
-                    f"{name}/{result['name']}",
+                    str(output_base / relative_name.name),
                     result["input_content"],
                 )
     buffer.seek(0)
@@ -128,27 +159,42 @@ if __name__ == "__main__":
 
     async def handle_extract_tables_click():
         global in_progress
+        cancel_event.clear()
         in_progress = True
         extract_button.enabled = False
+        stop_button.enabled = True
         download_link.style("display: none;")
         global results_zip
 
         in_progress_label.set_text("Initializing...")
-        results_zip = await run.cpu_bound(
+        extraction_result = await run.cpu_bound(
             extract_tables,
             uploaded_files,
             uploaded_files_pages,
             exception_queue,
             queue,
             options,
+            cancel_event,
         )
+        results_zip = extraction_result["results_zip"]
         extract_button.enabled = True
+        stop_button.enabled = False
         in_progress = False
-        if results_zip:
+        if extraction_result["cancelled"]:
+            ui.notify("Processing stopped by user", type="warning")
+        elif results_zip:
             ui.notify("Processing done. Please download results.")
             download_link.style("display: block;")
         else:
             ui.notify("Nothing to process")
+
+    def stop_processing():
+        if not in_progress:
+            return
+
+        cancel_event.set()
+        in_progress_label.set_text("Stopping processing...")
+        ui.notify("Stopping processing...", type="warning")
 
     def validate_page_range(value):
         value = value.replace(" ", "").strip()
@@ -299,15 +345,26 @@ if __name__ == "__main__":
         ui.label(
             "Add files you want to process. Only PDFs and images are accepted. For images, at least PNG and JPEG should be valid. After uploading the files, you can select page ranges to process in each PDF or leave blank for all pages."
         ).classes(f"w-[{MAX_WIDTH}px]")
-        return (
-            ui.upload(
-                label="First add files and then upload them with the upside arrow in the right.",
-                multiple=True,
-                on_upload=handle_upload,
+
+        with ui.column().classes("w-full"):
+            folder_path_input = ui.input(
+                "Or add a local folder path (processed recursively)",
+                placeholder="/path/to/folder",
+            ).classes("w-full")
+            ui.button(
+                "Add files from folder",
+                on_click=lambda: add_files_from_folder(folder_path_input.value),
+            ).classes("w-full")
+
+            return (
+                ui.upload(
+                    label="First add files and then upload them with the upside arrow in the right.",
+                    multiple=True,
+                    on_upload=handle_upload,
+                )
+                .props('accept="image/*,application/pdf" webkitdirectory directory')
+                .classes("w-full")
             )
-            .props('accept="image/*,application/pdf"')
-            .classes("w-full")
-        )
 
     def uploaded_files_view(file_upload):
         global uploaded_files_list
@@ -341,6 +398,13 @@ if __name__ == "__main__":
         extract_button = ui.button(
             "Extract tables", on_click=handle_extract_tables_click
         ).classes("w-full")
+        global stop_button
+        stop_button = ui.button(
+            "Stop Processing", on_click=stop_processing
+        ).classes("w-full bg-red-600 text-white").bind_visibility_from(
+            globals(), "in_progress"
+        )
+        stop_button.enabled = False
         with ui.row(align_items="center").classes("w-full justify-center"):
             ui.spinner(size="lg").bind_visibility_from(globals(), "in_progress")
             global in_progress_label
@@ -379,6 +443,44 @@ if __name__ == "__main__":
             page_ranges.append((int(start), int(end)))
 
         uploaded_files_pages[file_name] = page_ranges
+
+    def add_files_from_folder(folder_path):
+        from utils import get_document_paths
+
+        folder_path = Path(folder_path).expanduser()
+        if not folder_path.is_dir():
+            ui.notify("Folder path is not valid", type="negative")
+            return
+
+        root_dir_path, relative_paths = get_document_paths(folder_path)
+        if not relative_paths:
+            ui.notify("No supported files found in folder", type="warning")
+            return
+
+        added_count = 0
+        for relative_path in relative_paths:
+            real_path = root_dir_path / relative_path
+            file_name = str(relative_path)
+            if file_name in uploaded_files:
+                continue
+
+            with real_path.open("rb") as f:
+                uploaded_files[file_name] = {
+                    "name": file_name,
+                    "content": f.read(),
+                    "type": "application/pdf"
+                    if real_path.suffix.lower() == ".pdf"
+                    else "image/*",
+                }
+            uploaded_files_pages[file_name] = [(1, INF)]
+            if real_path.suffix.lower() == ".pdf":
+                add_to_uploaded_files_list(file_name)
+            added_count += 1
+
+        if added_count:
+            ui.notify(f"Added {added_count} files from folder")
+        else:
+            ui.notify("No new files were added", type="warning")
 
     def add_to_uploaded_files_list(file_name):
         with uploaded_files_list:
@@ -455,7 +557,7 @@ if __name__ == "__main__":
         {
             "method": "textract",
             "unskew": False,
-            "show-detected-boxes": False,
+            "show_detected_boxes": False,
             "extend_rows": False,
             "remove_dots_and_commas": False,
             "fix_num_misspellings": True,
@@ -469,4 +571,5 @@ if __name__ == "__main__":
     in_progress = False
     queue = manager.Queue()
     exception_queue = manager.Queue()
+    cancel_event = manager.Event()
     ui.run(native=False, reload=False)
