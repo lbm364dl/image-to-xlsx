@@ -115,8 +115,18 @@ def workbook_to_bytes(workbook):
     return virtual_workbook.read()
 
 
+# Initialize global variable for download endpoint
+results_zip = None
+
+
 @ui.page("/download")
 async def download_file():
+    if results_zip is None:
+        return StreamingResponse(
+            iter([b"No results available"]),
+            media_type="text/plain",
+            status_code=404,
+        )
     when = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
     return StreamingResponse(
         iter_bytes(results_zip),
@@ -150,7 +160,7 @@ if __name__ == "__main__":
         global download_link
         with ui.row().classes("w-full"):
             download_link = (
-                ui.link("Download results", "/download", new_tab=True)
+                ui.link("Download results", "/download")
                 .classes(
                     "w-full shadow-md q-btn q-btn-item q-btn--flat q-btn--rectangle bg-primary text-white hover:cursor-pointer"
                 )
@@ -176,7 +186,13 @@ if __name__ == "__main__":
             options,
             cancel_event,
         )
+        
+        # Update module-level results_zip
+        import sys
+        current_module = sys.modules[__name__]
+        current_module.results_zip = extraction_result["results_zip"]
         results_zip = extraction_result["results_zip"]
+        
         extract_button.enabled = True
         stop_button.enabled = False
         in_progress = False
@@ -354,7 +370,7 @@ if __name__ == "__main__":
 
         with ui.row().classes("w-full"):
 
-            async def _run_picker(mode):
+            async def _run_picker_pyqt(mode):
                 import asyncio
                 import subprocess
                 import sys
@@ -384,16 +400,102 @@ if __name__ == "__main__":
                 stdout, _ = await proc.communicate()
                 return stdout.decode().strip()
 
+            async def _run_picker_powershell(mode):
+                import asyncio
+                import subprocess
+
+                if mode == "files":
+                    ps_script = (
+                        'Add-Type -AssemblyName System.Windows.Forms;'
+                        '$d = New-Object System.Windows.Forms.OpenFileDialog;'
+                        '$d.Filter = "Supported files|*.pdf;*.png;*.jpg;*.jpeg";'
+                        '$d.Multiselect = $true;'
+                        'if ($d.ShowDialog() -eq "OK") { $d.FileNames -join "`n" }'
+                    )
+                else:
+                    ps_script = """\
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+[ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")] class FDC {}
+[ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IShellItem {
+    void BindToHandler(IntPtr a, ref Guid b, ref Guid c, out IntPtr d);
+    void GetParent(out IShellItem a);
+    void GetDisplayName(uint a, [MarshalAs(UnmanagedType.LPWStr)] out string b);
+    void GetAttributes(uint a, out uint b);
+    void Compare(IShellItem a, uint b, out int c);
+}
+[ComImport, Guid("42F85136-DB7E-439C-85F1-E4075D135FC8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IFileOpenDialog {
+    [PreserveSig] uint Show(IntPtr a);
+    void SetFileTypes(uint a, IntPtr b);
+    void SetFileTypeIndex(uint a);
+    void GetFileTypeIndex(out uint a);
+    void Advise(IntPtr a, out uint b);
+    void Unadvise(uint a);
+    void SetOptions(uint a);
+    void GetOptions(out uint a);
+    void SetDefaultFolder(IShellItem a);
+    void SetFolder(IShellItem a);
+    void GetFolder(out IShellItem a);
+    void GetCurrentSelection(out IShellItem a);
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string a);
+    void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string a);
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string a);
+    void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string a);
+    void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string a);
+    void GetResult(out IShellItem a);
+}
+public class FP {
+    public static string Run() {
+        var d = (IFileOpenDialog)new FDC();
+        uint o; d.GetOptions(out o); d.SetOptions(o | 0x20);
+        d.SetTitle("Select folder");
+        if (d.Show(IntPtr.Zero) == 0) {
+            IShellItem r; d.GetResult(out r);
+            string p; r.GetDisplayName(0x80058000, out p);
+            return p;
+        }
+        return "";
+    }
+}
+'@
+[FP]::Run()
+"""
+
+                proc = await asyncio.create_subprocess_exec(
+                    "powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                stdout, _ = await proc.communicate()
+                return stdout.decode().strip()
+
+            async def _run_picker(mode):
+                import platform
+                
+                if platform.system() == 'Windows':
+                    return await _run_picker_powershell(mode)
+                return await _run_picker_pyqt(mode)
+
             async def pick_files():
-                result = await _run_picker("files")
+                try:
+                    result = await _run_picker("files")
+                except Exception as e:
+                    ui.notify(f"Could not open file picker: {e}", type="negative")
+                    return
                 if result:
                     for file_path in result.splitlines():
-                        if file_path:
+                        if file_path and Path(file_path).is_file():
                             add_local_file(file_path)
 
             async def pick_folder():
-                result = await _run_picker("folder")
-                if result:
+                try:
+                    result = await _run_picker("folder")
+                except Exception as e:
+                    ui.notify(f"Could not open folder picker: {e}", type="negative")
+                    return
+                if result and Path(result).is_dir():
                     add_files_from_folder(result)
 
             ui.button("Add files", on_click=pick_files).classes("flex-grow")
