@@ -90,16 +90,16 @@ def create_results_zip(results, options):
             relative_name = Path(result["name"])
             output_base = relative_name.parent / relative_name.stem
             zipf.writestr(
-                str(output_base / f"{relative_name.stem}.xlsx"),
+                (output_base / f"{relative_name.stem}.xlsx").as_posix(),
                 workbook_to_bytes(result["table_workbook"]),
             )
             zipf.writestr(
-                str(output_base / f"footers_{relative_name.stem}.xlsx"),
+                (output_base / f"footers_{relative_name.stem}.xlsx").as_posix(),
                 workbook_to_bytes(result["footers_workbook"]),
             )
             if options.get("include_input_files_in_output"):
                 zipf.writestr(
-                    str(output_base / relative_name.name),
+                    (output_base / relative_name.name).as_posix(),
                     result["input_content"],
                 )
     buffer.seek(0)
@@ -367,7 +367,7 @@ if __name__ == "__main__":
                 if mode == "files":
                     script += (
                         "files, _ = QFileDialog.getOpenFileNames(None, 'Select files', '',\n"
-                        "    'Supported files (*.pdf *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)')\n"
+                        "    'Supported files (*.pdf *.png *.jpg *.jpeg)')\n"
                         "print('\\n'.join(files))\n"
                     )
                 else:
