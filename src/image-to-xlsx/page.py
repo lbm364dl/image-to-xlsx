@@ -71,6 +71,10 @@ class Page:
         return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
 
     def process_page(self, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        if stop_event and stop_event.is_set():
+            return
+
         get_page_tables_method = {
             "surya+paddle": self.get_page_tables_surya_plus_paddle,
             "pdf-text": self.get_page_tables_with_pdf_text,
@@ -81,6 +85,9 @@ class Page:
         tables = get_page_tables_method[self.document.method](**kwargs)
 
         for i, table in enumerate(tables):
+            if stop_event and stop_event.is_set():
+                return
+
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
@@ -109,6 +116,10 @@ class Page:
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
     def get_page_tables_surya_plus_paddle(self, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        if stop_event and stop_event.is_set():
+            return []
+
         self.set_models(**pretrained.all_models())
 
         if kwargs.get("unskew"):
@@ -119,6 +130,9 @@ class Page:
 
         tables = []
         for table in self.detect_tables():
+            if stop_event and stop_event.is_set():
+                return tables
+
             t = Table(
                 self.page,
                 self,
@@ -136,14 +150,19 @@ class Page:
                 compute_prefix=kwargs.get("compute_prefix"),
                 show_cropped_bboxes=kwargs.get("show_cropped_bboxes"),
                 show_detected_boxes=kwargs.get("show_detected_boxes"),
+                stop_event=stop_event,
             )
             tables.append(t)
 
         return tables
 
     def get_page_tables_with_pdf_text(self, **kwargs):
+        stop_event = kwargs.get("stop_event")
         tables = []
         for table in self.page.find_tables(strategy="text").tables:
+            if stop_event and stop_event.is_set():
+                return tables
+
             t = Table(
                 self.page,
                 self,
@@ -155,6 +174,10 @@ class Page:
         return tables
 
     def get_page_tables_textract(self, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        if stop_event and stop_event.is_set():
+            return []
+
         if kwargs.get("unskew"):
             self.rotate(delta=0.5, limit=5)
 
@@ -165,6 +188,10 @@ class Page:
         return self.build_textract_tables_from_response(response)
 
     def get_page_tables_textract_pickle(self, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        if stop_event and stop_event.is_set():
+            return []
+
         with open(kwargs.get("textract_response_pickle_file"), "rb") as f:
             response = pickle.load(f)
 
