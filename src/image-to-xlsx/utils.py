@@ -1,17 +1,30 @@
-import os
-import glob
 import re
 import configparser
 import io
 import math
-import sys
 from pathlib import Path
 from PIL import Image
 from definitions import MAX_TEXTRACT_DIMENSION
 
 
+SUPPORTED_EXTENSIONS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "tif",
+    "tiff",
+    "bmp",
+    "webp",
+}
+
+
 def file_extension(name):
-    return name.split(".")[-1]
+    return Path(name).suffix.lower().lstrip(".")
+
+
+def is_supported_document(path):
+    return path.is_file() and file_extension(path.name) in SUPPORTED_EXTENSIONS
 
 
 def save_workbook(workbook, where_to_save):
@@ -23,23 +36,23 @@ def save_workbook(workbook, where_to_save):
 
 
 def get_document_paths(input_path):
-    doc_paths = []
+    input_path = Path(input_path).expanduser().resolve()
 
-    if os.path.isdir(input_path):
-        root_dir_path = Path(input_path)
+    if input_path.is_dir():
+        root_dir_path = input_path
+        relative_paths = [
+            path.relative_to(root_dir_path)
+            for path in root_dir_path.rglob("*")
+            if path.is_file()
+            and is_supported_document(path)
+            and "results" not in path.relative_to(root_dir_path).parts
+        ]
+        return root_dir_path, sorted(relative_paths)
 
-        all_paths = glob.glob(
-            os.path.join("**", "*.*"), root_dir=root_dir_path, recursive=True
-        )
-        exclude_results = glob.glob(
-            os.path.join("results/**", "*.*"), root_dir=root_dir_path, recursive=True
-        )
-        doc_paths = list(set(all_paths) - set(exclude_results))
-    else:
-        root_dir_path = os.path.dirname(input_path)
-        doc_paths = [os.path.basename(input_path)]
+    if is_supported_document(input_path):
+        return input_path.parent, [Path(input_path.name)]
 
-    return Path(root_dir_path), [Path(p) for p in doc_paths]
+    return input_path.parent, []
 
 
 def lowest_color():

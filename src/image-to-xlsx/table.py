@@ -83,6 +83,10 @@ class Table:
     def get_cropped_cell_images(self, image_pad, compute_prefix, show_cropped_bboxes):
         cropped_imgs = []
         for cell in self.table["cells"][:compute_prefix]:
+            stop_event = getattr(self, "stop_event", None)
+            if stop_event and stop_event.is_set():
+                break
+
             cropped_img = np.array(self.table["img"].crop(cell.bbox))
             cropped_img = np.pad(
                 cropped_img,
@@ -105,6 +109,10 @@ class Table:
         output = self.pipeline.predict(cropped_imgs)
 
         for cell, pred in zip(self.table["cells"], output):
+            stop_event = getattr(self, "stop_event", None)
+            if stop_event and stop_event.is_set():
+                break
+
             row_ids, col_ids = cell.row_ids, cell.col_ids
             row_id, col_id = row_ids[0], col_ids[0]
 
@@ -360,8 +368,18 @@ class Table:
         compute_prefix=10**9,
         show_cropped_bboxes=False,
         show_detected_boxes=False,
+        stop_event=None,
     ):
+        self.stop_event = stop_event
+        if stop_event and stop_event.is_set():
+            self.table_data = defaultdict(lambda: defaultdict(list))
+            return
+
         self.recognize_structure(heuristic_thresh)
+
+        if stop_event and stop_event.is_set():
+            self.table_data = defaultdict(lambda: defaultdict(list))
+            return
 
         if show_detected_boxes:
             self.visualize_table_bboxes()
