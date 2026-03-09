@@ -370,50 +370,9 @@ if __name__ == "__main__":
 
         with ui.row().classes("w-full"):
 
-            async def _run_picker_pyqt(mode):
-                import asyncio
-                import subprocess
-                import sys
-
-                script = (
-                    "import sys\n"
-                    "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
-                    "app = QApplication(sys.argv)\n"
-                )
-                if mode == "files":
-                    script += (
-                        "files, _ = QFileDialog.getOpenFileNames(None, 'Select files', '',\n"
-                        "    'Supported files (*.pdf *.png *.jpg *.jpeg)')\n"
-                        "print('\\n'.join(files))\n"
-                    )
-                else:
-                    script += (
-                        "folder = QFileDialog.getExistingDirectory(None, 'Select folder')\n"
-                        "print(folder)\n"
-                    )
-
-                proc = await asyncio.create_subprocess_exec(
-                    sys.executable, "-c", script,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                )
-                stdout, _ = await proc.communicate()
-                return stdout.decode().strip()
-
-            async def _run_picker_powershell(mode):
-                import asyncio
-                import subprocess
-
-                if mode == "files":
-                    ps_script = (
-                        'Add-Type -AssemblyName System.Windows.Forms;'
-                        '$d = New-Object System.Windows.Forms.OpenFileDialog;'
-                        '$d.Filter = "Supported files|*.pdf;*.png;*.jpg;*.jpeg";'
-                        '$d.Multiselect = $true;'
-                        'if ($d.ShowDialog() -eq "OK") { $d.FileNames -join "`n" }'
-                    )
-                else:
-                    ps_script = """\
+            # COM IFileOpenDialog for folder picker (proven to work in frozen builds).
+            # GetForegroundWindow() is the owner handle so the dialog gets focus.
+            _FOLDER_PICKER_SCRIPT = """\
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
 [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")] class FDC {}
@@ -447,11 +406,13 @@ interface IFileOpenDialog {
     void GetResult(out IShellItem a);
 }
 public class FP {
-    public static string Run() {
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    public static string PickFolder() {
         var d = (IFileOpenDialog)new FDC();
         uint o; d.GetOptions(out o); d.SetOptions(o | 0x20);
         d.SetTitle("Select folder");
-        if (d.Show(IntPtr.Zero) == 0) {
+        IntPtr owner = GetForegroundWindow();
+        if (d.Show(owner) == 0) {
             IShellItem r; d.GetResult(out r);
             string p; r.GetDisplayName(0x80058000, out p);
             return p;
@@ -460,11 +421,69 @@ public class FP {
     }
 }
 '@
-[FP]::Run()
+[FP]::PickFolder()
 """
 
+            # WinForms OpenFileDialog for file picker with -STA flag and
+            # TopMost owner form to ensure focus. Multi-select enabled.
+            _FILE_PICKER_SCRIPT = """\
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Filter = "Supported files|*.pdf;*.png;*.jpg;*.jpeg|All files|*.*"
+$d.Multiselect = $true
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.StartPosition = "CenterScreen"
+$owner.Width = 0; $owner.Height = 0; $owner.Opacity = 0
+$owner.Show(); $owner.BringToFront()
+$result = $d.ShowDialog($owner)
+$owner.Close()
+if ($result -eq "OK") { $d.FileNames -join "`n" }
+"""
+
+            async def _run_picker_powershell(mode):
+                import asyncio
+                import subprocess
+
+                if mode == "files":
+                    ps_script = _FILE_PICKER_SCRIPT
+                    ps_args = ["powershell", "-NoProfile", "-STA", "-Command", ps_script]
+                else:
+                    ps_script = _FOLDER_PICKER_SCRIPT
+                    ps_args = ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script]
+
                 proc = await asyncio.create_subprocess_exec(
-                    "powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script,
+                    *ps_args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                stdout, _ = await proc.communicate()
+                return stdout.decode().strip()
+
+            async def _run_picker_pyqt(mode):
+                import asyncio
+                import subprocess
+                import sys
+
+                script = (
+                    "import sys\n"
+                    "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
+                    "app = QApplication(sys.argv)\n"
+                )
+                if mode == "files":
+                    script += (
+                        "files, _ = QFileDialog.getOpenFileNames(None, 'Select files', '',\n"
+                        "    'Supported files (*.pdf *.png *.jpg *.jpeg)')\n"
+                        "print('\\n'.join(files))\n"
+                    )
+                else:
+                    script += (
+                        "folder = QFileDialog.getExistingDirectory(None, 'Select folder')\n"
+                        "print(folder)\n"
+                    )
+
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-c", script,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                 )
@@ -473,7 +492,7 @@ public class FP {
 
             async def _run_picker(mode):
                 import platform
-                
+
                 if platform.system() == 'Windows':
                     return await _run_picker_powershell(mode)
                 return await _run_picker_pyqt(mode)
