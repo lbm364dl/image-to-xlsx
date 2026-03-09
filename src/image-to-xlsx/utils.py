@@ -12,10 +12,6 @@ SUPPORTED_EXTENSIONS = {
     "png",
     "jpg",
     "jpeg",
-    "tif",
-    "tiff",
-    "bmp",
-    "webp",
 }
 
 

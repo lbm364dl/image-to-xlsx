@@ -22,14 +22,15 @@ def extract_tables(
     import main
 
     results = []
+    cancelled = False
     file_names = list(uploaded_files.keys())
     total_files = len(file_names)
     for i, file_name in enumerate(file_names):
         file = uploaded_files[file_name]
         pages = uploaded_files_pages.get(file_name, [(1, options.get("last_page", 10**9))])
         if cancel_event.is_set():
-            queue.put_nowait("Processing stopped")
-            return {"results_zip": None, "cancelled": True}
+            cancelled = True
+            break
 
         queue.put_nowait(
             f"({i + 1} out of {total_files}) Processing file {file['name']}"
@@ -44,8 +45,8 @@ def extract_tables(
             )
 
             if cancel_event.is_set():
-                queue.put_nowait("Processing stopped")
-                return {"results_zip": None, "cancelled": True}
+                cancelled = True
+                break
 
             results.append(
                 {
@@ -65,21 +66,20 @@ def extract_tables(
             exception_queue.put_nowait("Wrong AWS client credentials. Try to fix them.")
             continue
         except main.ProcessingCancelled:
-            queue.put_nowait("Processing stopped")
-            return {"results_zip": None, "cancelled": True}
+            cancelled = True
+            break
         except Exception:
             traceback.print_exc()
             exception_queue.put_nowait(
                 "Unexpected error, try again or check command line error and contact developers"
             )
 
-    if cancel_event.is_set():
+    if cancelled or cancel_event.is_set():
         queue.put_nowait("Processing stopped")
-        return {"results_zip": None, "cancelled": True}
 
     return {
         "results_zip": create_results_zip(results, options) if results else None,
-        "cancelled": False,
+        "cancelled": cancelled or cancel_event.is_set(),
     }
 
 
@@ -180,8 +180,14 @@ if __name__ == "__main__":
         extract_button.enabled = True
         stop_button.enabled = False
         in_progress = False
-        if extraction_result["cancelled"]:
-            ui.notify("Processing stopped by user", type="warning")
+        if extraction_result["cancelled"] and results_zip:
+            ui.notify(
+                "Processing stopped by user. Partial results are available for download.",
+                type="warning",
+            )
+            download_link.style("display: block;")
+        elif extraction_result["cancelled"]:
+            ui.notify("Processing stopped by user. No files were completed.", type="warning")
         elif results_zip:
             ui.notify("Processing done. Please download results.")
             download_link.style("display: block;")
@@ -343,41 +349,86 @@ if __name__ == "__main__":
 
     def file_upload_input():
         ui.label(
-            "Add files you want to process. Only PDFs and images are accepted. For images, at least PNG and JPEG should be valid. After uploading the files, you can select page ranges to process in each PDF or leave blank for all pages."
+            "Add files or folders you want to process. Only PDFs and images are accepted. For images, at least PNG and JPEG should be valid. Folders are processed recursively and the output mirrors the input folder structure. You can select page ranges to process in each PDF or leave blank for all pages."
         ).classes(f"w-[{MAX_WIDTH}px]")
 
-        with ui.column().classes("w-full"):
-            folder_path_input = ui.input(
-                "Or add a local folder path (processed recursively)",
-                placeholder="/path/to/folder",
-            ).classes("w-full")
-            ui.button(
-                "Add files from folder",
-                on_click=lambda: add_files_from_folder(folder_path_input.value),
-            ).classes("w-full")
+        with ui.row().classes("w-full"):
 
-            return (
-                ui.upload(
-                    label="First add files and then upload them with the upside arrow in the right.",
-                    multiple=True,
-                    on_upload=handle_upload,
+            async def _run_picker(mode):
+                import asyncio
+                import subprocess
+                import sys
+
+                script = (
+                    "import sys\n"
+                    "from PyQt6.QtWidgets import QApplication, QFileDialog\n"
+                    "app = QApplication(sys.argv)\n"
                 )
-                .props('accept="image/*,application/pdf" webkitdirectory directory')
-                .classes("w-full")
-            )
+                if mode == "files":
+                    script += (
+                        "files, _ = QFileDialog.getOpenFileNames(None, 'Select files', '',\n"
+                        "    'Supported files (*.pdf *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp)')\n"
+                        "print('\\n'.join(files))\n"
+                    )
+                else:
+                    script += (
+                        "folder = QFileDialog.getExistingDirectory(None, 'Select folder')\n"
+                        "print(folder)\n"
+                    )
 
-    def uploaded_files_view(file_upload):
-        global uploaded_files_list
-        uploaded_files_list = ui.column()
+                proc = await asyncio.create_subprocess_exec(
+                    sys.executable, "-c", script,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                stdout, _ = await proc.communicate()
+                return stdout.decode().strip()
+
+            async def pick_files():
+                result = await _run_picker("files")
+                if result:
+                    for file_path in result.splitlines():
+                        if file_path:
+                            add_local_file(file_path)
+
+            async def pick_folder():
+                result = await _run_picker("folder")
+                if result:
+                    add_files_from_folder(result)
+
+            ui.button("Add files", on_click=pick_files).classes("flex-grow")
+            ui.button("Add folder", on_click=pick_folder).classes("flex-grow")
+
+    def uploaded_files_view():
+        global uploaded_files_list, uploaded_files_rows, search_input, files_list_container
+
+        uploaded_files_rows = {}
+
+        def filter_files():
+            term = search_input.value.lower() if search_input.value else ""
+            for name, row in uploaded_files_rows.items():
+                row.set_visibility(term in name.lower())
+
+        search_input = ui.input(
+            placeholder="Search through uploaded files...",
+            on_change=lambda _: filter_files(),
+        ).classes("w-full").props('clearable clear-icon="close" icon="search"')
+        search_input.set_visibility(False)
+
+        files_list_container = ui.column().classes("w-full")
+        files_list_container.set_visibility(False)
+
+        with files_list_container:
+            with ui.scroll_area().classes(f"w-full max-h-[300px] border rounded"):
+                uploaded_files_list = ui.column().classes("w-full p-2")
+
+            ui.button(
+                "Clear file list",
+                on_click=reset_uploaded_files,
+            ).classes("w-full")
 
         for file in uploaded_files.values():
-            if file["type"] == "application/pdf":
-                add_to_uploaded_files_list(file["name"])
-
-        ui.button(
-            "Clear file list",
-            on_click=lambda: reset_uploaded_files(file_upload),
-        ).classes("w-full")
+            add_to_uploaded_files_list(file["name"], file["type"])
 
     def extract_tables_button():
         ui.label(
@@ -447,6 +498,10 @@ if __name__ == "__main__":
     def add_files_from_folder(folder_path):
         from utils import get_document_paths
 
+        if not folder_path:
+            ui.notify("No folder selected", type="warning")
+            return
+
         folder_path = Path(folder_path).expanduser()
         if not folder_path.is_dir():
             ui.notify("Folder path is not valid", type="negative")
@@ -473,8 +528,7 @@ if __name__ == "__main__":
                     else "image/*",
                 }
             uploaded_files_pages[file_name] = [(1, INF)]
-            if real_path.suffix.lower() == ".pdf":
-                add_to_uploaded_files_list(file_name)
+            add_to_uploaded_files_list(file_name, uploaded_files[file_name]["type"])
             added_count += 1
 
         if added_count:
@@ -482,35 +536,69 @@ if __name__ == "__main__":
         else:
             ui.notify("No new files were added", type="warning")
 
-    def add_to_uploaded_files_list(file_name):
+    def add_to_uploaded_files_list(file_name, file_type=None):
+        if not uploaded_files_rows:
+            search_input.set_visibility(True)
+            files_list_container.set_visibility(True)
+
+        is_pdf = file_type == "application/pdf" if file_type else file_name.lower().endswith(".pdf")
         with uploaded_files_list:
-            with ui.row(align_items="center"):
-                ui.label(file_name)
-                ui.input(
-                    label="Pages",
-                    placeholder="1,2-5,7-9",
-                    on_change=lambda e: set_page_ranges(e, file_name),
-                    validation={"Wrong page range": validate_page_range},
-                )
+            row = ui.row(align_items="center").classes("w-full flex-nowrap gap-2")
+            uploaded_files_rows[file_name] = row
+            with row:
 
-    async def handle_upload(file):
-        ui.notify(f"Uploaded {file.name}")
+                def remove_file(fn=file_name, r=row):
+                    uploaded_files.pop(fn, None)
+                    uploaded_files_pages.pop(fn, None)
+                    uploaded_files_rows.pop(fn, None)
+                    r.delete()
+                    if not uploaded_files_rows:
+                        search_input.set_visibility(False)
+                        files_list_container.set_visibility(False)
+                        search_input.set_value("")
 
-        if file.type == "application/pdf":
-            add_to_uploaded_files_list(file.name)
+                ui.button(icon="delete", on_click=remove_file).props(
+                    "flat dense color=negative"
+                ).classes("flex-shrink-0")
 
-        uploaded_files[file.name] = {
-            "name": file.name,
-            "content": await run.io_bound(lambda: file.content.read()),
-            "type": file.type,
-        }
-        uploaded_files_pages[file.name] = [(1, INF)]
+                if is_pdf:
+                    ui.input(
+                        label="Pages",
+                        placeholder="1,2-5,7-9",
+                        on_change=lambda e: set_page_ranges(e, file_name),
+                        validation={"Wrong page range": validate_page_range},
+                    ).classes("flex-shrink-0").props("no-error-icon hide-bottom-space dense").style("width: 140px;")
 
-    def reset_uploaded_files(file_upload):
+                ui.label(file_name).classes(
+                    "flex-grow overflow-x-auto whitespace-nowrap text-sm"
+                ).style("min-width: 0;")
+
+    def add_local_file(file_path):
+        file_path = Path(file_path)
+        file_name = file_path.name
+        if file_name in uploaded_files:
+            return
+
+        file_type = (
+            "application/pdf" if file_path.suffix.lower() == ".pdf" else "image/*"
+        )
+        with file_path.open("rb") as f:
+            uploaded_files[file_name] = {
+                "name": file_name,
+                "content": f.read(),
+                "type": file_type,
+            }
+        uploaded_files_pages[file_name] = [(1, INF)]
+        add_to_uploaded_files_list(file_name, file_type)
+
+    def reset_uploaded_files():
         uploaded_files.clear()
         uploaded_files_pages.clear()
+        uploaded_files_rows.clear()
         uploaded_files_list.clear()
-        file_upload.reset()
+        search_input.set_visibility(False)
+        search_input.set_value("")
+        files_list_container.set_visibility(False)
         download_link.style("display: none;")
         ui.notify("Removed all uploaded files")
 
@@ -545,8 +633,8 @@ if __name__ == "__main__":
                 method_option = method_selector()
                 aws_credentials_card(method_option)
                 option_checkboxes(method_option)
-                file_upload = file_upload_input()
-                uploaded_files_view(file_upload)
+                file_upload_input()
+                uploaded_files_view()
                 extract_tables_button()
                 set_timers()
 
