@@ -2,3 +2,5 @@ env/
 src/image-to-xlsx/__pycache__
 src/image-to-xlsx/inputs
 src/image-to-xlsx/.env
+src/image-to-xlsx/dist
+src/image-to-xlsx/build
