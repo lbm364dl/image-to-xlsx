@@ -14,164 +14,134 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices={"surya", "pdf-text", "textract", "textract-pickle-debug", "paddleocr-vl", "glm-ocr"},
+        choices={"surya", "pdf-text", "paddleocr-vl", "glm-ocr"},
         help=textwrap.dedent("""\
-        Method to use for table recognition. Default surya. Methods:
-        - surya: open source AI table recognition and OCR using the surya library
-        - pdf-text: use PyMuPDF library to recognize the table (using internal PDF text), if you know the PDF comes with text
-        - paddleocr-vl: uses PaddleOCR-VL 1.5 vision-language model for document parsing and table extraction (free open source)
-        - glm-ocr: uses GLM-OCR multimodal model for document parsing and table extraction via OpenAI-compatible API (requires a running GLM-OCR server or Zhipu MaaS API key)
+        Extraction method. Default surya. Each method runs as a microservice:
+        - surya: open source AI table recognition and OCR (surya-ocr)
+        - paddleocr-vl: PaddleOCR Vision-Language model for document parsing
+        - glm-ocr: GLM-OCR multimodal model via API (needs a running vLLM backend)
+        - pdf-text: uses embedded PDF text (no OCR, no GPU needed)
         """),
         default="surya",
     )
     parser.add_argument(
         "--first-page",
         type=int,
-        help="First page to process (for PDFs only, 1-indexed). Default start of document",
+        help="First page to process (1-indexed). Default start of document",
         default=1,
     )
     parser.add_argument(
         "--last-page",
         type=int,
-        help="Last page to process (for PDFs only, 1-indexed). Default end of document",
+        help="Last page to process (1-indexed). Default end of document",
         default=INF,
     )
     parser.add_argument(
         "--binarize",
         type=int,
         choices={0, 1},
-        help="Use binarization, i.e. force black & white pixels (0 for no, 1 for yes). Default 0",
+        help="Force black & white pixels (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--unskew",
         type=int,
         choices={0, 1},
-        help="Try to detect and undo image rotation (0 for no, 1 for yes). Default 0",
+        help="Try to detect and undo image rotation (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--nlp-postprocess",
         type=int,
         choices={0, 1},
-        help="Use non-free OpenAI to try to fix OCR misspellings (0 for no, 1 for yes). Default 0",
+        help="Use OpenAI to fix OCR misspellings (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--nlp-postprocess-prompt-file",
         type=str,
-        help="Use a custom prompt message for NLP postprocessing. Indicate the path of the text file with the prompt message. By default, a generic one for cleaning cell typos is used.",
+        help="Custom prompt file for NLP postprocessing.",
         default=None,
     )
     parser.add_argument(
         "--text-language",
         type=str,
-        help="ISO2 language code for NLP postprocessing suggesting the language of the text for misspellings fixing. Default 'en'",
+        help="ISO2 language code for NLP postprocessing. Default 'en'",
         default="en",
     )
     parser.add_argument(
         "--show-detected-boxes",
         type=int,
         choices={0, 1},
-        help="Open image with detected boxes for each table for debugging (0 for no, 1 for yes). Default 0",
+        help="Show detected boxes for debugging (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--extend-rows",
         type=int,
         choices={0, 1},
-        help="If there is a row that tries to include several texts into the same cell, try to extend to a new row below (0 for no, 1 for yes). Default 0, meaning all texts to the same cell are just joined with a space separator",
+        help="Split multi-text cells into separate rows (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--image-pad",
         type=int,
-        help="When running OCR for each individual cell, add this amount of pixels in padding on the cropped image on all four sides. More or less padding may help for better OCR text recognition. Default 100 pixels",
+        help="Padding pixels around cropped cells for OCR. Default 100",
         default=100,
     )
     parser.add_argument(
         "--compute-prefix",
         type=int,
-        help="For debugging, compute only this amount of cells in the output table, since it can take too long to compute all of them. Default all cells",
+        help="For debugging: compute only this many cells. Default all",
         default=INF,
     )
     parser.add_argument(
         "--fixed-decimal-places",
         type=int,
-        help="Forcefully write a decimal point this number of places to the left of the last digit. By default no decimal points are added.",
+        help="Force a decimal point this many places from the right. Default 0",
         default=0,
-    )
-    parser.add_argument(
-        "--textract-response-pickle-file",
-        type=str,
-        help="Path to pkl file with Textract response for a particular page. Use for debugging and not calling the API all the time",
-        default=None,
     )
     parser.add_argument(
         "--overwrite-existing-result",
         type=int,
         choices={0, 1},
-        help="Process document even if it was already processed before (i.e. it has its individual results directory already created). Default 0 (i.e. skip document)",
+        help="Re-process already-processed documents (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--remove-dots-and-commas",
         type=int,
         choices={0, 1},
-        help="If the OCR scanning struggles differentiating commas and dots, remove all of them from the output to check manually. Default 0 (i.e. keep them)",
+        help="Remove all dots and commas from output (0/1). Default 0",
         default=0,
     )
     parser.add_argument(
         "--fix-num-misspellings",
         type=int,
         choices={0, 1},
-        help="Force substitution of common wrongly detected digits as letters, e.g., change I to 1, b to 6, O to 0, etc... Default 1 (i.e. try to fix them)",
+        help="Fix common digit-as-letter OCR errors (I->1, O->0, etc). Default 1",
         default=1,
     )
     parser.add_argument(
         "--decimal-separator",
         type=str,
         choices={",", "."},
-        help="Choose the decimal separator between dot or comma. Default dot (.)",
+        help="Decimal separator. Default dot (.)",
         default=".",
     )
     parser.add_argument(
         "--thousands-separator",
         type=str,
         choices={",", "."},
-        help="Choose the thousands separator between dot or comma. Default comma (,)",
+        help="Thousands separator. Default comma (,)",
         default=",",
     )
     parser.add_argument(
         "--dewarp",
         type=int,
         choices={0, 1},
-        help="Dewarp document images before extraction using GeoTr AI model (recommended for photos of curved/folded pages). Dewarped images are saved alongside results. First run downloads the model. Default 0",
+        help="Dewarp document images before extraction using GeoTr AI (0/1). Default 0",
         default=0,
-    )
-    parser.add_argument(
-        "--glm-ocr-host",
-        type=str,
-        help="GLM-OCR inference server hostname. Default localhost",
-        default="localhost",
-    )
-    parser.add_argument(
-        "--glm-ocr-port",
-        type=int,
-        help="GLM-OCR inference server port. Default 8080",
-        default=8080,
-    )
-    parser.add_argument(
-        "--glm-ocr-api-key",
-        type=str,
-        help="API key for GLM-OCR service (optional for self-hosted).",
-        default=None,
-    )
-    parser.add_argument(
-        "--glm-ocr-model",
-        type=str,
-        help="Model name for GLM-OCR API requests. Default glm-ocr",
-        default="glm-ocr",
     )
 
     return parser.parse_args(args=(sys.argv[1:] or ["--help"]))

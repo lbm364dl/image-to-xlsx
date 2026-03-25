@@ -17,10 +17,12 @@ class Document:
         self.fixed_decimal_places = fixed_decimal_places
         self.extension = file_extension(document["name"])
         self.tot_pages = 1
+        self.pdf_bytes = None
 
         if self.extension == "pdf":
             self.pdf = pymupdf.open("pdf", document["content"])
             self.tot_pages = self.pdf.page_count
+            self.pdf_bytes = document["content"]
 
         self.set_page_nums(document["pages"])
         self.load_pages(document["content"], method)
@@ -42,7 +44,9 @@ class Document:
     def load_pages(self, document, method):
         if self.extension == "pdf":
             if method == "pdf-text":
-                self.pages = {i: self.pdf.load_page(i - 1) for i in self.page_nums}
+                # pdf-text extraction is handled by the service using raw PDF bytes;
+                # pages dict maps page numbers to None (no images needed).
+                self.pages = {i: None for i in self.page_nums}
             else:
                 pdf = pypdfium2.PdfDocument(BytesIO(document))
                 if hasattr(pdf, "render"):

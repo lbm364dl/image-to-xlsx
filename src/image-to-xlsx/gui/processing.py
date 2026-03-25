@@ -8,8 +8,6 @@ from io import BytesIO
 from pathlib import Path
 import zipfile
 
-CHUNK_SIZE = 1024 * 1024
-
 
 def extract_tables(
     uploaded_files, uploaded_files_pages, exception_queue, queue, options
@@ -17,21 +15,6 @@ def extract_tables(
     """Extract tables from uploaded files. Runs in a subprocess."""
     import traceback
     import main
-
-    method = options.get("method")
-    aws_region_errors = ()
-    aws_credential_errors = ()
-    if method in {"textract", "textract-pickle-debug"}:
-        import botocore.exceptions as aws_exceptions
-
-        aws_region_errors = (
-            aws_exceptions.EndpointConnectionError,
-            aws_exceptions.NoRegionError,
-        )
-        aws_credential_errors = (
-            aws_exceptions.ClientError,
-            aws_exceptions.NoCredentialsError,
-        )
 
     results = []
     total_files = len(uploaded_files)
@@ -44,7 +27,9 @@ def extract_tables(
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
-            table_workbook, footers_workbook, dewarped_images, ocr_bbox_images = main.run(file, **options)
+            table_workbook, footers_workbook, dewarped_images = main.run(
+                file, **options
+            )
             results.append(
                 {
                     "table_workbook": table_workbook,
@@ -52,41 +37,27 @@ def extract_tables(
                     "name": file["name"],
                     "input_content": file["content"],
                     "dewarped_images": dewarped_images,
-                    "ocr_bbox_images": ocr_bbox_images,
                 }
             )
-        except aws_region_errors:
-            exception_queue.put_nowait("Wrong AWS region. Try to fix credentials.")
-            continue
-        except aws_credential_errors:
-            exception_queue.put_nowait("Wrong AWS client credentials. Try to fix them.")
-            continue
         except Exception:
             traceback.print_exc()
             exception_queue.put_nowait(
-                "Unexpected error, try again or check command line error and contact developers"
+                "Unexpected error, try again or check command line error "
+                "and contact developers"
             )
-
-    # Free GPU memory after extraction (important since cpu_bound reuses processes)
-    try:
-        from page import clear_gpu_memory
-        clear_gpu_memory()
-    except Exception:
-        pass
 
     return create_results_zip(results, options) if results else None
 
 
 def create_results_zip(results, options):
     """Create a zip file containing all extraction results."""
-    from io import BytesIO as _BytesIO
-
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for result in results:
             name = Path(result["name"]).stem
             zipf.writestr(
-                f"{name}/{name}.xlsx", workbook_to_bytes(result["table_workbook"])
+                f"{name}/{name}.xlsx",
+                workbook_to_bytes(result["table_workbook"]),
             )
             zipf.writestr(
                 f"{name}/footers_{name}.xlsx",
@@ -99,27 +70,14 @@ def create_results_zip(results, options):
                 )
             # Save dewarped page images when dewarping was enabled
             dewarped_images = result.get("dewarped_images", {})
-            if dewarped_images:
-                for page_num, pil_img in dewarped_images.items():
-                    img_buf = _BytesIO()
-                    pil_img.save(img_buf, format="PNG")
-                    img_buf.seek(0)
-                    zipf.writestr(
-                        f"{name}/dewarped/page_{page_num}.png",
-                        img_buf.read(),
-                    )
-            
-            # Save OCR bbox debug images if generated
-            ocr_bbox_images = result.get("ocr_bbox_images", {})
-            if ocr_bbox_images:
-                for page_num, pil_img in ocr_bbox_images.items():
-                    img_buf = _BytesIO()
-                    pil_img.save(img_buf, format="PNG")
-                    img_buf.seek(0)
-                    zipf.writestr(
-                        f"{name}/ocr_bboxes/page_{page_num}.png",
-                        img_buf.read(),
-                    )
+            for page_num, pil_img in dewarped_images.items():
+                img_buf = BytesIO()
+                pil_img.save(img_buf, format="PNG")
+                img_buf.seek(0)
+                zipf.writestr(
+                    f"{name}/dewarped/page_{page_num}.png",
+                    img_buf.read(),
+                )
     buffer.seek(0)
     return buffer.read()
 

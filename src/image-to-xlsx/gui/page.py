@@ -72,7 +72,7 @@ def register_pages(manager, extraction_semaphore):
                 ui.notify("Upload failed: could not read file contents.")
                 return
 
-            if (content_type == "application/pdf" or raw_content[:4] == b"%PDF"):
+            if content_type == "application/pdf" or raw_content[:4] == b"%PDF":
                 content_type = "application/pdf"
                 if not filename.lower().endswith(".pdf"):
                     filename = f"{filename}.pdf"
@@ -104,8 +104,6 @@ def register_pages(manager, extraction_semaphore):
                 components.page_header()
                 components.methods_explanation()
                 method_option = components.method_selector(session)
-                components.aws_credentials_card(method_option, session)
-                components.glm_ocr_config_card(method_option, session)
                 components.option_checkboxes(method_option, session)
                 file_upload = components.file_upload_input(on_upload=handle_upload)
                 components.uploaded_files_view(

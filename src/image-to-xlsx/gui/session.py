@@ -7,10 +7,9 @@ ensuring uploaded files, options, and processing state are isolated.
 from definitions import INF
 
 DEFAULT_OPTIONS = {
-    "method": "paddleocr-vl",
+    "method": "surya",
     "unskew": False,
     "dewarp": False,
-    "show-detected-boxes": False,
     "extend_rows": False,
     "remove_dots_and_commas": False,
     "fix_num_misspellings": True,
@@ -18,10 +17,6 @@ DEFAULT_OPTIONS = {
     "thousands_separator": ",",
     "decimal_separator": ".",
     "include_input_files_in_output": True,
-    "glm_ocr_host": "localhost",
-    "glm_ocr_port": 8080,
-    "glm_ocr_api_key": "",
-    "glm_ocr_model": "glm-ocr",
 }
 
 

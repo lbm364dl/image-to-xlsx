@@ -1,95 +1,99 @@
+"""Page processing — delegates extraction to microservices via HTTP."""
+
+import io
 import os
 
-# Workaround: PaddlePaddle's default auto_growth GPU allocator can enter
-# an infinite ioctl loop on some driver/GPU combos (e.g. RTX A2000, driver 580).
-# Must be set before importing paddle anywhere.
-os.environ.setdefault("FLAGS_allocator_strategy", "naive_best_fit")
-
 import numpy as np
-import pickle
-import io
-import time
-from definitions import MAX_TEXTRACT_SYNC_SIZE, ONE_MB
+import requests
+from PIL import Image
+
+from binarization import binarize
 from table import Table
 from unskewing import correct_skew
-from binarization import binarize
-from PIL import Image
-from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
-# Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
-_paddleocr_vl_pipeline = None
-# Cached GLM-OCR parser (loaded once, reused across pages)
-_glm_ocr_parser = None
+# ---------------------------------------------------------------------------
+# Service URLs (configure via environment variables or docker-compose)
+# ---------------------------------------------------------------------------
+SURYA_SERVICE_URL = os.environ.get("SURYA_SERVICE_URL", "http://localhost:8001")
+PADDLEOCR_VL_SERVICE_URL = os.environ.get(
+    "PADDLEOCR_VL_SERVICE_URL", "http://localhost:8002"
+)
+GLM_OCR_SERVICE_URL = os.environ.get("GLM_OCR_SERVICE_URL", "http://localhost:8003")
+PDF_TEXT_SERVICE_URL = os.environ.get("PDF_TEXT_SERVICE_URL", "http://localhost:8004")
+DEWARP_SERVICE_URL = os.environ.get("DEWARP_SERVICE_URL", "http://localhost:8005")
+
+_REQUEST_TIMEOUT = int(os.environ.get("SERVICE_TIMEOUT", "300"))
+
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
 
-def clear_gpu_memory():
-    """Release all cached GPU models/pipelines and free GPU memory."""
-    import gc
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
 
-    # Clear cached PaddleOCR-VL pipeline
-    global _paddleocr_vl_pipeline
-    _paddleocr_vl_pipeline = None
 
-    # Clear cached GLM-OCR parser
-    global _glm_ocr_parser
-    if _glm_ocr_parser is not None:
-        try:
-            _glm_ocr_parser.close()
-        except Exception:
-            pass
-        _glm_ocr_parser = None
+def _image_to_png(image):
+    """Serialize a PIL Image (or array) to PNG bytes."""
+    buf = io.BytesIO()
+    if isinstance(image, Image.Image):
+        image.convert("RGB").save(buf, format="PNG")
+    else:
+        Image.fromarray(np.array(image)).save(buf, format="PNG")
+    return buf.getvalue()
 
-    # Clear dewarped image reference
-    global _last_dewarped_image
-    _last_dewarped_image = None
 
-    # Clear cached surya predictors
-    try:
-        import pretrained
-        pretrained.clear_all_models()
-    except ImportError:
-        pass
+def _post_image(url, image, **extra_fields):
+    """POST an image to an extraction service, return the JSON response."""
+    png = _image_to_png(image)
+    resp = requests.post(
+        f"{url}/extract",
+        files={"image": ("page.png", png, "image/png")},
+        data=extra_fields,
+        timeout=_REQUEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-        # Clear dewarping model cache
-        try:
-            from dewarping.dewarp import clear_model_cache
-            clear_model_cache()
-        except ImportError:
-            pass
-            torch.cuda.empty_cache()
-    except ImportError:
-        pass
 
-    try:
-        import paddle
-        paddle.device.cuda.empty_cache()
-    except (ImportError, Exception):
-        pass
+def _build_tables(data, page_image, page_obj):
+    """Convert the unified service JSON into a list of Table objects."""
+    tables = []
+    for entry in data["tables"]:
+        t = Table(page_image, page_obj, entry["bbox"])
+        t.set_table_from_service_response(entry["cells"])
+        tables.append(t)
+    return tables
+
+
+# ---------------------------------------------------------------------------
+# Page
+# ---------------------------------------------------------------------------
 
 
 class Page:
-    def __init__(
-        self,
-        page,
-        page_num,
-        document,
-    ):
+    def __init__(self, page, page_num, document):
         self.page = page
         self.page_num = page_num
         self.document = document
 
+    # -- Preprocessing (lightweight, stays in the main app) -----------------
+
     def dewarp(self):
-        """Dewarp the page image using GeoTr (doc-matcher)."""
-        from dewarping import dewarp_image as _dewarp
+        """Dewarp via the dewarp microservice."""
         global _last_dewarped_image
-        self.page = _dewarp(self.page)
+        png = _image_to_png(self.page)
+        resp = requests.post(
+            f"{DEWARP_SERVICE_URL}/dewarp",
+            files={"image": ("page.png", png, "image/png")},
+            timeout=_REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        self.page = Image.open(io.BytesIO(resp.content)).convert("RGB")
         _last_dewarped_image = self.page.copy()
 
     @staticmethod
     def get_last_dewarped_image():
-        """Return the most recently dewarped image (or None)."""
         return _last_dewarped_image
 
     @staticmethod
@@ -101,329 +105,76 @@ class Page:
         _, corrected = correct_skew(np.array(self.page), delta, limit, custom_angle)
         self.page = Image.fromarray(corrected)
 
-    def binarize(self, method="otsu", block_size=None, constant=None):
+    def binarize_image(self, method="otsu", block_size=None, constant=None):
         self.page = binarize(self.page, method, block_size, constant)
 
-    def detect_tables(self):
-        import pretrained
-
-        lp = pretrained.layout_predictor()
-        layout_predictions = lp([self.page])
-        layout_prediction = layout_predictions[0]
-
-        return [bbox for bbox in layout_prediction.bboxes if bbox.label == "Table"]
+    # -- Extraction (delegates to microservices) ----------------------------
 
     def process_page(self, **kwargs):
-        get_page_tables_method = {
-            "surya": self.get_page_tables_surya,
-            "pdf-text": self.get_page_tables_with_pdf_text,
-            "textract": self.get_page_tables_textract,
-            "textract-pickle-debug": self.get_page_tables_textract_pickle,
-            "paddleocr-vl": self.get_page_tables_paddleocr_vl,
-            "glm-ocr": self.get_page_tables_glm_ocr,
+        methods = {
+            "surya": self._extract_surya,
+            "pdf-text": self._extract_pdf_text,
+            "paddleocr-vl": self._extract_paddleocr_vl,
+            "glm-ocr": self._extract_glm_ocr,
         }
 
-        tables = get_page_tables_method[self.document.method](**kwargs)
+        tables = methods[self.document.method](**kwargs)
 
         for i, table in enumerate(tables):
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            table_matrix = table.as_clean_matrix(kwargs.get("remove_dots_and_commas"))
-            table_matrix = table.overwrite_seminumeric_cells_confidence(
-                table_matrix,
+            matrix = table.as_clean_matrix(kwargs.get("remove_dots_and_commas"))
+            matrix = table.overwrite_seminumeric_cells_confidence(
+                matrix,
                 kwargs.get("decimal_separator"),
                 kwargs.get("thousands_separator"),
                 kwargs.get("fix_num_misspellings"),
             )
 
             if kwargs.get("nlp_postprocess"):
-                table_matrix = table.nlp_postprocess(
-                    table_matrix,
+                matrix = table.nlp_postprocess(
+                    matrix,
                     kwargs.get("text_language"),
                     kwargs.get("nlp_postprocess_prompt_file"),
                 )
 
-            table_matrix = table.maybe_parse_numeric_cells(
-                table_matrix,
+            matrix = table.maybe_parse_numeric_cells(
+                matrix,
                 kwargs.get("decimal_separator"),
                 kwargs.get("thousands_separator"),
                 kwargs.get("fix_num_misspellings"),
             )
 
-            table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
+            table.add_to_sheet(self.page_num, i + 1, matrix, table.footer_text)
 
-    def get_page_tables_surya(self, **kwargs):
+    def _extract_surya(self, **kwargs):
         if kwargs.get("unskew"):
-            self.rotate(delta=0.5, limit=5)
-
+            self.rotate()
         if kwargs.get("binarize"):
-            self.binarize(method="otsu", block_size=31, constant=10)
-
-        tables = []
-        for table in self.detect_tables():
-            t = Table(
-                self.page,
-                self,
-                table.bbox,
-            )
-
-            t.set_table_from_surya(
-                image_pad=kwargs.get("image_pad"),
-                show_detected_boxes=kwargs.get("show_detected_boxes"),
-            )
-            tables.append(t)
-
-        return tables
-
-    def get_page_tables_with_pdf_text(self, **kwargs):
-        tables = []
-        for table in self.page.find_tables(strategy="text").tables:
-            t = Table(
-                self.page,
-                self,
-                table.bbox,
-            )
-            t.set_table_from_pdf_text(table)
-            tables.append(t)
-
-        return tables
-
-    def get_page_tables_textract(self, **kwargs):
-        if kwargs.get("unskew"):
-            self.rotate(delta=0.5, limit=5)
-
-        if kwargs.get("binarize"):
-            self.binarize(method="otsu", block_size=31, constant=10)
-
-        response = self.get_textract_response()
-        return self.build_textract_tables_from_response(response)
-
-    def get_page_tables_textract_pickle(self, **kwargs):
-        with open(kwargs.get("textract_response_pickle_file"), "rb") as f:
-            response = pickle.load(f)
-
-        return self.build_textract_tables_from_response(response)
-
-    def get_textract_response(self):
-        import boto3
-
-        self.page = self.page.convert("RGB")
-        self.page = maybe_reduce_resolution(self.page)
-        self.page = image_below_size(self.page, ONE_MB)
-        textract = boto3.client("textract", **get_aws_credentials())
-        img_byte_arr = io.BytesIO()
-        self.page.save(img_byte_arr, format="JPEG")
-        img_byte_arr = img_byte_arr.getvalue()
-
-        # Analyze file directly (small enough after auto resize below 1MB)
-        assert len(img_byte_arr) <= MAX_TEXTRACT_SYNC_SIZE
-
-        return textract.analyze_document(
-            Document={"Bytes": img_byte_arr},
-            FeatureTypes=["TABLES"],
+            self.binarize_image(method="otsu", block_size=31, constant=10)
+        data = _post_image(
+            SURYA_SERVICE_URL,
+            self.page,
+            image_pad=str(kwargs.get("image_pad", 100)),
         )
+        return _build_tables(data, self.page, self)
 
-    def get_page_tables_paddleocr_vl(self, **kwargs):
-        import tempfile
-        from paddleocr import PaddleOCRVL
+    def _extract_paddleocr_vl(self, **kwargs):
+        data = _post_image(PADDLEOCR_VL_SERVICE_URL, self.page)
+        return _build_tables(data, self.page, self)
 
-        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+    def _extract_glm_ocr(self, **kwargs):
+        data = _post_image(GLM_OCR_SERVICE_URL, self.page)
+        return _build_tables(data, self.page, self)
 
-        device = kwargs.get("paddleocr_vl_device")
-        if device is None:
-            import paddle
-            device = "gpu:0" if paddle.device.cuda.device_count() > 0 else "cpu"
-
-        global _paddleocr_vl_pipeline
-        if _paddleocr_vl_pipeline is None:
-            _paddleocr_vl_pipeline = PaddleOCRVL(device=device)
-        pipeline = _paddleocr_vl_pipeline
-
-        # Save the page image to a temp file for PaddleOCR-VL input
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp_path = tmp.name
-            if isinstance(self.page, Image.Image):
-                self.page.save(tmp_path)
-            else:
-                Image.fromarray(np.array(self.page)).save(tmp_path)
-
-        try:
-            output = pipeline.predict(tmp_path)
-            tables = []
-            for res in output:
-                res_json = res.json["res"]
-                parsing_res_list = res_json.get("parsing_res_list", [])
-                for block in parsing_res_list:
-                    if block.get("block_label") == "table":
-                        markdown_content = block.get("block_content", "")
-                        if not markdown_content.strip():
-                            continue
-                        bbox = block.get("block_bbox", [0, 0, 0, 0])
-                        if hasattr(bbox, "tolist"):
-                            bbox = bbox.tolist()
-                        t = Table(self.page, self, bbox)
-                        t.set_table_from_paddleocr_vl_markdown(markdown_content)
-                        tables.append(t)
-
-            return tables
-        finally:
-            os.unlink(tmp_path)
-
-    def get_page_tables_glm_ocr(self, **kwargs):
-        """Extract tables using the GLM-OCR SDK with local pipeline.
-
-        Requires a running GLM-OCR inference server (vLLM, SGLang, or Ollama).
-        The SDK handles layout detection (PP-DocLayout-V3) locally and sends
-        cropped regions to the OCR server for recognition.
-        """
-        import tempfile
-        import json
-        import yaml
-        from glmocr import GlmOcr
-
-        api_host = kwargs.get("glm_ocr_host", "localhost")
-        api_port = int(kwargs.get("glm_ocr_port", 8080))
-        api_key = kwargs.get("glm_ocr_api_key") or None
-        model_name = kwargs.get("glm_ocr_model", "glm-ocr")
-
-        global _glm_ocr_parser
-        if _glm_ocr_parser is None:
-            # Create a temporary config YAML for the SDK
-            config = {
-                "pipeline": {
-                    "maas": {"enabled": False},
-                    "ocr_api": {
-                        "api_host": api_host,
-                        "api_port": api_port,
-                        "connect_timeout": 300,
-                        "request_timeout": 300,
-                    },
-                    "enable_layout": True,
-                },
-            }
-            if api_key:
-                config["pipeline"]["ocr_api"]["api_key"] = api_key
-            if model_name:
-                config["pipeline"]["ocr_api"]["model"] = model_name
-
-            fd, config_path = tempfile.mkstemp(suffix=".yaml")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    yaml.dump(config, f)
-                _glm_ocr_parser = GlmOcr(config_path=config_path)
-            finally:
-                try:
-                    os.unlink(config_path)
-                except OSError:
-                    pass
-
-        # Save page image to a temp file
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp_path = tmp.name
-            if isinstance(self.page, Image.Image):
-                self.page.save(tmp_path)
-            else:
-                Image.fromarray(np.array(self.page)).save(tmp_path)
-
-        try:
-            result = _glm_ocr_parser.parse(tmp_path, save_layout_visualization=False)
-
-            tables = []
-
-            # Extract tables from structured JSON result (layout detection mode)
-            json_result = result.json_result
-            if isinstance(json_result, str):
-                try:
-                    json_result = json.loads(json_result)
-                except (json.JSONDecodeError, TypeError):
-                    json_result = []
-
-            if isinstance(json_result, list):
-                for page_data in json_result:
-                    if not isinstance(page_data, list):
-                        continue
-                    for block in page_data:
-                        if not isinstance(block, dict):
-                            continue
-                        if block.get("label") == "table":
-                            content = block.get("content", "")
-                            if not content.strip():
-                                continue
-                            bbox = block.get("bbox_2d") or [0, 0, 0, 0]
-                            if hasattr(bbox, "tolist"):
-                                bbox = bbox.tolist()
-                            t = Table(self.page, self, bbox)
-                            t.set_table_from_paddleocr_vl_markdown(content)
-                            tables.append(t)
-
-            # Fallback: parse tables from the markdown result
-            if not tables and result.markdown_result:
-                tables = self._extract_tables_from_markdown(result.markdown_result)
-
-            return tables
-        finally:
-            os.unlink(tmp_path)
-
-    def _extract_tables_from_markdown(self, markdown_content):
-        """Parse markdown content and extract all table blocks as Table objects."""
-        import re
-
-        tables = []
-        # Match HTML tables
-        html_table_pattern = re.compile(
-            r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE
+    def _extract_pdf_text(self, **kwargs):
+        resp = requests.post(
+            f"{PDF_TEXT_SERVICE_URL}/extract",
+            files={"pdf": ("doc.pdf", self.document.pdf_bytes, "application/pdf")},
+            data={"page_num": str(self.page_num)},
+            timeout=_REQUEST_TIMEOUT,
         )
-        # Match markdown pipe tables (at least 2 rows with pipes)
-        md_table_pattern = re.compile(
-            r"(?:^|\n)"
-            r"((?:\|[^\n]+\|\s*\n){2,})",
-            re.MULTILINE,
-        )
-
-        found_tables = []
-
-        # Find HTML tables
-        for match in html_table_pattern.finditer(markdown_content):
-            found_tables.append(match.group(0))
-
-        # Find markdown pipe tables (only in non-HTML parts)
-        remaining = html_table_pattern.sub("", markdown_content)
-        for match in md_table_pattern.finditer(remaining):
-            table_text = match.group(1).strip()
-            if table_text:
-                found_tables.append(table_text)
-
-        for table_text in found_tables:
-            bbox = [0, 0, 0, 0]
-            t = Table(self.page, self, bbox)
-            t.set_table_from_paddleocr_vl_markdown(table_text)
-            # Only add if the table has actual data
-            if t.table_data and len(t.table_data) > 0:
-                tables.append(t)
-
-        return tables
-
-    def build_textract_tables_from_response(self, response):
-        blocks = response["Blocks"]
-        file_tables = [block for block in blocks if block["BlockType"] == "TABLE"]
-        id_to_block = {block["Id"]: block for block in blocks}
-
-        tables = []
-        for table in file_tables:
-            bbox = self.get_textract_table_bbox(table)
-            t = Table(self.page, self, bbox)
-            t.set_table_from_textract_pickle(table, id_to_block)
-            tables.append(t)
-
-        return tables
-
-    def get_textract_table_bbox(self, table):
-        bbox = table["Geometry"]["BoundingBox"]
-        y, x = self.to_int(self.page, bbox["Top"], bbox["Left"])
-        height, width = self.to_int(self.page, bbox["Height"], bbox["Width"])
-        return [x, y, x + width, y + height]
-
-    def to_int(self, img, y, x):
-        w, h = img.size
-        return int(y * h), int(x * w)
+        resp.raise_for_status()
+        data = resp.json()
+        return _build_tables(data, None, self)

@@ -21,7 +21,6 @@ def run(
     fixed_decimal_places=0,
     extend_rows=0,
     heuristic_thresh=0.6,
-    textract_response_pickle_file=None,
     remove_dots_and_commas=0,
     decimal_separator=".",
     thousands_separator=",",
@@ -35,62 +34,52 @@ def run(
         method,
     )
 
-    dewarped_images = {}  # page_num -> PIL Image (if dewarp is enabled)
+    dewarped_images = {}
 
-    try:
-        for i, page in sorted(d.pages.items()):
-            print(f"    Processing page {i}")
-            p = Page(page, i, d)
+    for i, page in sorted(d.pages.items()):
+        print(f"    Processing page {i}")
+        p = Page(page, i, d)
 
-            if dewarp:
-                print(f"    Dewarping page {i}...")
-                p.dewarp()
-                dewarped_img = Page.get_last_dewarped_image()
-                if dewarped_img is not None:
-                    dewarped_images[i] = dewarped_img
-                Page.reset_last_dewarped_image()
+        if dewarp:
+            print(f"    Dewarping page {i}...")
+            p.dewarp()
+            dewarped_img = Page.get_last_dewarped_image()
+            if dewarped_img is not None:
+                dewarped_images[i] = dewarped_img
+            Page.reset_last_dewarped_image()
 
-            p.process_page(
-                unskew=unskew,
-                binarize=binarize,
-                extend_rows=extend_rows,
-                nlp_postprocess=nlp_postprocess,
-                nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
-                text_language=text_language,
-                show_detected_boxes=show_detected_boxes,
-                compute_prefix=compute_prefix,
-                image_pad=image_pad,
-                heuristic_thresh=heuristic_thresh,
-                textract_response_pickle_file=textract_response_pickle_file,
-                remove_dots_and_commas=remove_dots_and_commas,
-                decimal_separator=decimal_separator,
-                thousands_separator=thousands_separator,
-                fix_num_misspellings=fix_num_misspellings,
-                use_ocr_confidence=kwargs.get("use_ocr_confidence"),
-                show_ocr_bboxes=kwargs.get("show_ocr_bboxes"),
-            )
-    finally:
-        from page import clear_gpu_memory, _ocr_bbox_debug_images
-        ocr_bbox_images = _ocr_bbox_debug_images.copy()
-        clear_gpu_memory()
+        p.process_page(
+            unskew=unskew,
+            binarize=binarize,
+            extend_rows=extend_rows,
+            nlp_postprocess=nlp_postprocess,
+            nlp_postprocess_prompt_file=nlp_postprocess_prompt_file,
+            text_language=text_language,
+            show_detected_boxes=show_detected_boxes,
+            compute_prefix=compute_prefix,
+            image_pad=image_pad,
+            heuristic_thresh=heuristic_thresh,
+            remove_dots_and_commas=remove_dots_and_commas,
+            decimal_separator=decimal_separator,
+            thousands_separator=thousands_separator,
+            fix_num_misspellings=fix_num_misspellings,
+        )
 
-    return d.workbook, d.footers_workbook, dewarped_images, ocr_bbox_images
+    return d.workbook, d.footers_workbook, dewarped_images
 
 
-def save_output(table_workbook, footers_workbook, output_dir, file_name):
+def save_output(table_workbook, footers_workbook, output_dir, file_name, source_path=None):
     output_dir.mkdir(parents=True, exist_ok=True)
     output_xlsx_path = output_dir / f"{file_name}.xlsx"
     save_workbook(table_workbook, output_xlsx_path)
-    shutil.copy(real_path, output_dir)
+    if source_path:
+        shutil.copy(source_path, output_dir)
     footers_xlsx_path = output_dir / f"footers_{file_name}.xlsx"
     save_workbook(footers_workbook, footers_xlsx_path)
 
 
 if __name__ == "__main__":
     args = parse_args()
-
-    from document import Document
-    from page import Page
 
     root_dir_path, relative_paths = get_document_paths(args.input_path)
 
@@ -111,7 +100,13 @@ if __name__ == "__main__":
                 "content": f.read(),
                 "pages": [(args.first_page, args.last_page)],
             }
-            table_workbook, footers_workbook, _dewarped = run(document, **vars(args))
+            table_workbook, footers_workbook, _dewarped = run(
+                document, **vars(args)
+            )
             save_output(
-                table_workbook, footers_workbook, output_dir, relative_path.stem
+                table_workbook,
+                footers_workbook,
+                output_dir,
+                relative_path.stem,
+                source_path=real_path,
             )
