@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pillow
+numpy
+python-multipart
+torch
+surya-ocr==0.6.13

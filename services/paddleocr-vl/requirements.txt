@@ -1,0 +1,8 @@
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu130/
+fastapi
+uvicorn[standard]
+pillow
+numpy
+python-multipart
+paddlepaddle-gpu
+paddleocr[all]

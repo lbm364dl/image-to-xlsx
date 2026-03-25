@@ -1,0 +1,9 @@
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cu130/
+fastapi
+uvicorn[standard]
+pillow
+numpy
+python-multipart
+pyyaml
+paddlepaddle-gpu
+glmocr @ git+https://github.com/zai-org/GLM-OCR.git
