@@ -101,12 +101,17 @@ def unload():
     """Release all models and free GPU memory."""
     global _layout_predictor, _table_rec_predictor
     global _recognition_predictor, _detection_predictor
+    was_loaded = any([
+        _layout_predictor, _table_rec_predictor,
+        _recognition_predictor, _detection_predictor,
+    ])
     _layout_predictor = None
     _table_rec_predictor = None
     _recognition_predictor = None
     _detection_predictor = None
-    _free_gpu()
-    return {"status": "unloaded"}
+    if was_loaded:
+        _free_gpu()
+    return {"status": "unloaded", "was_loaded": was_loaded}
 
 
 @app.post("/extract")
@@ -192,7 +197,8 @@ async def extract(
         return JSONResponse({"tables": tables})
 
     except Exception as exc:
-        _free_gpu()
+        # Clear all models so a retry starts from a clean state
+        unload()
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}")
 
 

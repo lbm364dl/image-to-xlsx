@@ -182,9 +182,11 @@ def health():
 def unload():
     """Release the parser and free GPU memory."""
     global _parser
+    was_loaded = _parser is not None
     _parser = None
-    _free_gpu()
-    return {"status": "unloaded"}
+    if was_loaded:
+        _free_gpu()
+    return {"status": "unloaded", "was_loaded": was_loaded}
 
 
 @app.post("/extract")
@@ -242,6 +244,7 @@ async def extract(image: UploadFile = File(...)):
         return JSONResponse({"tables": tables})
 
     except Exception as exc:
+        unload()
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}")
     finally:
         os.unlink(tmp_path)

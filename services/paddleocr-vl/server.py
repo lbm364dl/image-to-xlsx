@@ -125,9 +125,11 @@ def health():
 def unload():
     """Release the pipeline and free GPU memory."""
     global _pipeline
+    was_loaded = _pipeline is not None
     _pipeline = None
-    _free_gpu()
-    return {"status": "unloaded"}
+    if was_loaded:
+        _free_gpu()
+    return {"status": "unloaded", "was_loaded": was_loaded}
 
 
 @app.post("/extract")
@@ -170,6 +172,10 @@ async def extract(image: UploadFile = File(...)):
         return JSONResponse({"tables": tables})
 
     except Exception as exc:
+        # Only clear the Python reference — don't call paddle.device.cuda
+        # operations since a CUDA error may have poisoned the context.
+        global _pipeline
+        _pipeline = None
         raise HTTPException(status_code=500, detail=f"Extraction failed: {exc}")
     finally:
         os.unlink(tmp_path)
