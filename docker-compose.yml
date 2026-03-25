@@ -1,0 +1,123 @@
+# Microservices orchestration for image-to-xlsx.
+#
+# Each extraction method runs as an isolated service with its own
+# dependencies.  The main app is a lightweight HTTP client.
+#
+# Usage examples:
+#   # Start the app + Surya + PDF-text (lightweight combo):
+#   docker compose up app surya pdf-text
+#
+#   # Start everything including GPU-heavy services:
+#   docker compose up
+#
+#   # GLM-OCR needs a vLLM backend — start it with:
+#   docker compose up app glm-ocr glm-ocr-vllm
+
+services:
+  # ---------------------------------------------------------------------------
+  # Main application (GUI + CLI)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      STORAGE_SECRET: "${STORAGE_SECRET:-change-me-in-production}"
+      MAX_CONCURRENT_EXTRACTIONS: "${MAX_CONCURRENT_EXTRACTIONS:-1}"
+      SURYA_SERVICE_URL: "http://surya:8000"
+      PADDLEOCR_VL_SERVICE_URL: "http://paddleocr-vl:8000"
+      GLM_OCR_SERVICE_URL: "http://glm-ocr:8000"
+      PDF_TEXT_SERVICE_URL: "http://pdf-text:8000"
+      DEWARP_SERVICE_URL: "http://dewarp:8000"
+      SERVICE_TIMEOUT: "300"
+    depends_on:
+      pdf-text:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Extraction services
+  # ---------------------------------------------------------------------------
+
+  surya:
+    build:
+      context: .
+      dockerfile: services/surya/Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  paddleocr-vl:
+    build:
+      context: .
+      dockerfile: services/paddleocr-vl/Dockerfile
+    environment:
+      FLAGS_allocator_strategy: naive_best_fit
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  glm-ocr:
+    build:
+      context: .
+      dockerfile: services/glm-ocr/Dockerfile
+    environment:
+      LLM_HOST: "glm-ocr-vllm"
+      LLM_PORT: "8000"
+      LLM_MODEL: "${GLM_OCR_MODEL:-glm-ocr}"
+      LLM_API_KEY: "${GLM_OCR_API_KEY:-}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Optional vLLM backend for GLM-OCR.
+  # Override GLM_OCR_HF_MODEL to change the HuggingFace model path.
+  glm-ocr-vllm:
+    image: vllm/vllm-openai:latest
+    command:
+      - "--model"
+      - "${GLM_OCR_HF_MODEL:-THUDM/glm-ocr}"
+      - "--trust-remote-code"
+      - "--max-model-len"
+      - "8192"
+    ports:
+      - "8004:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  pdf-text:
+    build:
+      context: .
+      dockerfile: services/pdf-text/Dockerfile
+
+  dewarp:
+    build:
+      context: .
+      dockerfile: services/dewarp/Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

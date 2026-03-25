@@ -1,0 +1,13 @@
+# Main application dependencies — no ML frameworks needed.
+# All heavy inference is delegated to the extraction microservices.
+nicegui
+openpyxl
+Pillow
+PyMuPDF
+pypdfium2
+numpy
+opencv-python
+scikit-image
+requests
+openai
+python-dotenv
