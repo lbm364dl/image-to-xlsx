@@ -1,5 +1,7 @@
 env/
-src/image-to-xlsx/__pycache__
+__pycache__/
+*.pyc
 src/image-to-xlsx/inputs
 src/image-to-xlsx/.env
+src/image-to-xlsx/dewarping/models/
 deploy/*.env
