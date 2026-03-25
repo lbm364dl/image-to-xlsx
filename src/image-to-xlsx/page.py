@@ -18,6 +18,8 @@ from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 # Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
 _paddleocr_vl_pipeline = None
+# Cached GLM-OCR parser (loaded once, reused across pages)
+_glm_ocr_parser = None
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
@@ -29,6 +31,15 @@ def clear_gpu_memory():
     # Clear cached PaddleOCR-VL pipeline
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
+
+    # Clear cached GLM-OCR parser
+    global _glm_ocr_parser
+    if _glm_ocr_parser is not None:
+        try:
+            _glm_ocr_parser.close()
+        except Exception:
+            pass
+        _glm_ocr_parser = None
 
     # Clear dewarped image reference
     global _last_dewarped_image
@@ -109,6 +120,7 @@ class Page:
             "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
             "paddleocr-vl": self.get_page_tables_paddleocr_vl,
+            "glm-ocr": self.get_page_tables_glm_ocr,
         }
 
         tables = get_page_tables_method[self.document.method](**kwargs)
@@ -257,6 +269,140 @@ class Page:
             return tables
         finally:
             os.unlink(tmp_path)
+
+    def get_page_tables_glm_ocr(self, **kwargs):
+        """Extract tables using the GLM-OCR SDK with local pipeline.
+
+        Requires a running GLM-OCR inference server (vLLM, SGLang, or Ollama).
+        The SDK handles layout detection (PP-DocLayout-V3) locally and sends
+        cropped regions to the OCR server for recognition.
+        """
+        import tempfile
+        import json
+        import yaml
+        from glmocr import GlmOcr
+
+        api_host = kwargs.get("glm_ocr_host", "localhost")
+        api_port = int(kwargs.get("glm_ocr_port", 8080))
+        api_key = kwargs.get("glm_ocr_api_key") or None
+        model_name = kwargs.get("glm_ocr_model", "glm-ocr")
+
+        global _glm_ocr_parser
+        if _glm_ocr_parser is None:
+            # Create a temporary config YAML for the SDK
+            config = {
+                "pipeline": {
+                    "maas": {"enabled": False},
+                    "ocr_api": {
+                        "api_host": api_host,
+                        "api_port": api_port,
+                        "connect_timeout": 300,
+                        "request_timeout": 300,
+                    },
+                    "enable_layout": True,
+                },
+            }
+            if api_key:
+                config["pipeline"]["ocr_api"]["api_key"] = api_key
+            if model_name:
+                config["pipeline"]["ocr_api"]["model"] = model_name
+
+            fd, config_path = tempfile.mkstemp(suffix=".yaml")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    yaml.dump(config, f)
+                _glm_ocr_parser = GlmOcr(config_path=config_path)
+            finally:
+                try:
+                    os.unlink(config_path)
+                except OSError:
+                    pass
+
+        # Save page image to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+            if isinstance(self.page, Image.Image):
+                self.page.save(tmp_path)
+            else:
+                Image.fromarray(np.array(self.page)).save(tmp_path)
+
+        try:
+            result = _glm_ocr_parser.parse(tmp_path, save_layout_visualization=False)
+
+            tables = []
+
+            # Extract tables from structured JSON result (layout detection mode)
+            json_result = result.json_result
+            if isinstance(json_result, str):
+                try:
+                    json_result = json.loads(json_result)
+                except (json.JSONDecodeError, TypeError):
+                    json_result = []
+
+            if isinstance(json_result, list):
+                for page_data in json_result:
+                    if not isinstance(page_data, list):
+                        continue
+                    for block in page_data:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("label") == "table":
+                            content = block.get("content", "")
+                            if not content.strip():
+                                continue
+                            bbox = block.get("bbox_2d") or [0, 0, 0, 0]
+                            if hasattr(bbox, "tolist"):
+                                bbox = bbox.tolist()
+                            t = Table(self.page, self, bbox)
+                            t.set_table_from_paddleocr_vl_markdown(content)
+                            tables.append(t)
+
+            # Fallback: parse tables from the markdown result
+            if not tables and result.markdown_result:
+                tables = self._extract_tables_from_markdown(result.markdown_result)
+
+            return tables
+        finally:
+            os.unlink(tmp_path)
+
+    def _extract_tables_from_markdown(self, markdown_content):
+        """Parse markdown content and extract all table blocks as Table objects."""
+        import re
+
+        tables = []
+        # Match HTML tables
+        html_table_pattern = re.compile(
+            r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE
+        )
+        # Match markdown pipe tables (at least 2 rows with pipes)
+        md_table_pattern = re.compile(
+            r"(?:^|\n)"
+            r"((?:\|[^\n]+\|\s*\n){2,})",
+            re.MULTILINE,
+        )
+
+        found_tables = []
+
+        # Find HTML tables
+        for match in html_table_pattern.finditer(markdown_content):
+            found_tables.append(match.group(0))
+
+        # Find markdown pipe tables (only in non-HTML parts)
+        remaining = html_table_pattern.sub("", markdown_content)
+        for match in md_table_pattern.finditer(remaining):
+            table_text = match.group(1).strip()
+            if table_text:
+                found_tables.append(table_text)
+
+        for table_text in found_tables:
+            bbox = [0, 0, 0, 0]
+            t = Table(self.page, self, bbox)
+            t.set_table_from_paddleocr_vl_markdown(table_text)
+            # Only add if the table has actual data
+            if t.table_data and len(t.table_data) > 0:
+                tables.append(t)
+
+        return tables
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]

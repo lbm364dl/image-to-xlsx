@@ -105,6 +105,7 @@ def register_pages(manager, extraction_semaphore):
                 components.methods_explanation()
                 method_option = components.method_selector(session)
                 components.aws_credentials_card(method_option, session)
+                components.glm_ocr_config_card(method_option, session)
                 components.option_checkboxes(method_option, session)
                 file_upload = components.file_upload_input(on_upload=handle_upload)
                 components.uploaded_files_view(

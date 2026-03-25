@@ -28,7 +28,7 @@ class Table:
         self.image = whole_image
         self.table_bbox = table_bbox
 
-        if page.document.method not in ("pdf-text", "paddleocr-vl"):
+        if page.document.method not in ("pdf-text", "paddleocr-vl", "glm-ocr"):
             self.cropped_img = self.image.crop(table_bbox)
 
     def is_numeric_cell(self, text, threshold=0.6):

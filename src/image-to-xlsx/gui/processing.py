@@ -44,7 +44,7 @@ def extract_tables(
         file = {**file, "pages": pages}
         try:
             options["fixed_decimal_places"] = int(options["fixed_decimal_places"])
-            table_workbook, footers_workbook, dewarped_images = main.run(file, **options)
+            table_workbook, footers_workbook, dewarped_images, ocr_bbox_images = main.run(file, **options)
             results.append(
                 {
                     "table_workbook": table_workbook,
@@ -52,6 +52,7 @@ def extract_tables(
                     "name": file["name"],
                     "input_content": file["content"],
                     "dewarped_images": dewarped_images,
+                    "ocr_bbox_images": ocr_bbox_images,
                 }
             )
         except aws_region_errors:
@@ -105,6 +106,18 @@ def create_results_zip(results, options):
                     img_buf.seek(0)
                     zipf.writestr(
                         f"{name}/dewarped/page_{page_num}.png",
+                        img_buf.read(),
+                    )
+            
+            # Save OCR bbox debug images if generated
+            ocr_bbox_images = result.get("ocr_bbox_images", {})
+            if ocr_bbox_images:
+                for page_num, pil_img in ocr_bbox_images.items():
+                    img_buf = _BytesIO()
+                    pil_img.save(img_buf, format="PNG")
+                    img_buf.seek(0)
+                    zipf.writestr(
+                        f"{name}/ocr_bboxes/page_{page_num}.png",
                         img_buf.read(),
                     )
     buffer.seek(0)
