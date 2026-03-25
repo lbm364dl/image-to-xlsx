@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from page import Page, _image_to_png, _post_image, _build_tables
+from page import Page, _image_to_png, _post_image, _build_tables, _unload_other_services
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +59,30 @@ class TestImageToPng:
         png = _image_to_png(img)
         recovered = Image.open(io.BytesIO(png))
         assert recovered.size == (30, 40)
+
+
+# ---------------------------------------------------------------------------
+# _unload_other_services
+# ---------------------------------------------------------------------------
+
+
+class TestUnloadOtherServices:
+    @patch("page.requests.post")
+    def test_unloads_other_services(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        _unload_other_services("surya")
+        # Should call /unload on paddleocr-vl and glm-ocr, but NOT surya
+        urls = [call[0][0] for call in mock_post.call_args_list]
+        assert not any("8001" in u for u in urls)  # surya not called
+        assert any("8002" in u for u in urls)  # paddleocr-vl called
+        assert any("8003" in u for u in urls)  # glm-ocr called
+
+    @patch("page.requests.post")
+    def test_ignores_unreachable_services(self, mock_post):
+        import requests as req
+        mock_post.side_effect = req.ConnectionError("connection refused")
+        # Should not raise even if services are down
+        _unload_other_services("surya")
 
 
 # ---------------------------------------------------------------------------

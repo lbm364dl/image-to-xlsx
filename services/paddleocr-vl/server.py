@@ -104,9 +104,30 @@ def _rows_to_cells(rows):
 # ---------------------------------------------------------------------------
 
 
+def _free_gpu():
+    import gc
+
+    gc.collect()
+    try:
+        import paddle
+
+        paddle.device.cuda.empty_cache()
+    except Exception:
+        pass
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/unload")
+def unload():
+    """Release the pipeline and free GPU memory."""
+    global _pipeline
+    _pipeline = None
+    _free_gpu()
+    return {"status": "unloaded"}
 
 
 @app.post("/extract")

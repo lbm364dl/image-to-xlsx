@@ -24,6 +24,13 @@ DEWARP_SERVICE_URL = os.environ.get("DEWARP_SERVICE_URL", "http://localhost:8005
 
 _REQUEST_TIMEOUT = int(os.environ.get("SERVICE_TIMEOUT", "300"))
 
+# Map method names to their service URLs (GPU services only)
+_GPU_SERVICES = {
+    "surya": SURYA_SERVICE_URL,
+    "paddleocr-vl": PADDLEOCR_VL_SERVICE_URL,
+    "glm-ocr": GLM_OCR_SERVICE_URL,
+}
+
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
@@ -31,6 +38,17 @@ _last_dewarped_image = None
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
+
+
+def _unload_other_services(active_method):
+    """Ask all GPU services *except* the active one to release their models."""
+    for method, url in _GPU_SERVICES.items():
+        if method == active_method:
+            continue
+        try:
+            requests.post(f"{url}/unload", timeout=5)
+        except requests.RequestException:
+            pass  # service not running — nothing to unload
 
 
 def _image_to_png(image):
@@ -117,6 +135,9 @@ class Page:
             "paddleocr-vl": self._extract_paddleocr_vl,
             "glm-ocr": self._extract_glm_ocr,
         }
+
+        # Free VRAM from other GPU services before loading the active one
+        _unload_other_services(self.document.method)
 
         tables = methods[self.document.method](**kwargs)
 

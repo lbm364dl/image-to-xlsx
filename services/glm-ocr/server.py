@@ -160,9 +160,31 @@ def _tables_from_markdown(markdown_content):
 # ---------------------------------------------------------------------------
 
 
+def _free_gpu():
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/unload")
+def unload():
+    """Release the parser and free GPU memory."""
+    global _parser
+    _parser = None
+    _free_gpu()
+    return {"status": "unloaded"}
 
 
 @app.post("/extract")

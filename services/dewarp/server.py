@@ -29,9 +29,40 @@ def _get_dewarp_fn():
     return _dewarp_fn
 
 
+def _free_gpu():
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/unload")
+def unload():
+    """Release the dewarping model and free GPU memory."""
+    global _dewarp_fn
+    # The model is held inside the dewarping module; reset our reference
+    # and try to clear the module-level model too.
+    _dewarp_fn = None
+    try:
+        import dewarping
+
+        if hasattr(dewarping, "_model"):
+            dewarping._model = None
+    except Exception:
+        pass
+    _free_gpu()
+    return {"status": "unloaded"}
 
 
 @app.post("/dewarp")

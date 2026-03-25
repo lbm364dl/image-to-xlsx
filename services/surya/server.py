@@ -96,6 +96,19 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/unload")
+def unload():
+    """Release all models and free GPU memory."""
+    global _layout_predictor, _table_rec_predictor
+    global _recognition_predictor, _detection_predictor
+    _layout_predictor = None
+    _table_rec_predictor = None
+    _recognition_predictor = None
+    _detection_predictor = None
+    _free_gpu()
+    return {"status": "unloaded"}
+
+
 @app.post("/extract")
 async def extract(
     image: UploadFile = File(...),

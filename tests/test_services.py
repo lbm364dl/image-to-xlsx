@@ -180,6 +180,11 @@ class TestSuryaServiceSchema:
         )
         assert resp.status_code == 400
 
+    def test_unload(self):
+        resp = self.client.post("/unload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "unloaded"
+
 
 # ---------------------------------------------------------------------------
 # PaddleOCR-VL Service (skip if not installed)
@@ -214,6 +219,11 @@ class TestPaddleocrVlServiceSchema:
         assert resp.status_code == 200
         _validate_response_schema(resp.json())
 
+    def test_unload(self):
+        resp = self.client.post("/unload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "unloaded"
+
 
 # ---------------------------------------------------------------------------
 # GLM-OCR Service (skip if not installed)
@@ -236,6 +246,11 @@ class TestGlmOcrServiceSchema:
     def test_health(self):
         resp = self.client.get("/health")
         assert resp.status_code == 200
+
+    def test_unload(self):
+        resp = self.client.post("/unload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "unloaded"
 
 
 # ---------------------------------------------------------------------------
@@ -287,3 +302,8 @@ class TestDewarpServiceSchema:
             files={"image": ("bad.png", b"not an image", "image/png")},
         )
         assert resp.status_code == 400
+
+    def test_unload(self):
+        resp = self.client.post("/unload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "unloaded"
