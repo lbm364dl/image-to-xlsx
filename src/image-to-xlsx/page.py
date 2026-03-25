@@ -42,13 +42,20 @@ _last_dewarped_image = None
 
 def _unload_other_services(active_method):
     """Ask all GPU services *except* the active one to release their models."""
+    freed = False
     for method, url in _GPU_SERVICES.items():
         if method == active_method:
             continue
         try:
-            requests.post(f"{url}/unload", timeout=5)
+            resp = requests.post(f"{url}/unload", timeout=5)
+            if resp.status_code == 200 and resp.json().get("was_loaded"):
+                freed = True
         except requests.RequestException:
             pass  # service not running — nothing to unload
+    if freed:
+        # Give CUDA a moment to release VRAM before loading the next model
+        import time
+        time.sleep(1)
 
 
 def _image_to_png(image):
@@ -190,6 +197,11 @@ class Page:
         return _build_tables(data, self.page, self)
 
     def _extract_pdf_text(self, **kwargs):
+        if not self.document.pdf_bytes:
+            raise ValueError(
+                "pdf-text method requires a PDF file, not an image. "
+                "Use surya or paddleocr-vl for images."
+            )
         resp = requests.post(
             f"{PDF_TEXT_SERVICE_URL}/extract",
             files={"pdf": ("doc.pdf", self.document.pdf_bytes, "application/pdf")},
