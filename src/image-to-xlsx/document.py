@@ -67,4 +67,5 @@ class Document:
                             page.close()
                     self.pages = pages
         else:
-            self.pages = {1: Image.open(BytesIO(document))}
+            from PIL import ImageOps
+            self.pages = {1: ImageOps.exif_transpose(Image.open(BytesIO(document)))}

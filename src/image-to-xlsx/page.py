@@ -18,8 +18,8 @@ from utils import image_below_size, maybe_reduce_resolution, get_aws_credentials
 
 # Cached PaddleOCR-VL pipeline (loaded once, reused across pages)
 _paddleocr_vl_pipeline = None
-# Cached standalone OCR engine for confidence scoring
-_paddleocr_ocr_engine = None
+# Cached GLM-OCR parser (loaded once, reused across pages)
+_glm_ocr_parser = None
 # Last dewarped page image (stored so it can be included in the results zip)
 _last_dewarped_image = None
 
@@ -32,9 +32,14 @@ def clear_gpu_memory():
     global _paddleocr_vl_pipeline
     _paddleocr_vl_pipeline = None
 
-    # Clear cached OCR engine
-    global _paddleocr_ocr_engine
-    _paddleocr_ocr_engine = None
+    # Clear cached GLM-OCR parser
+    global _glm_ocr_parser
+    if _glm_ocr_parser is not None:
+        try:
+            _glm_ocr_parser.close()
+        except Exception:
+            pass
+        _glm_ocr_parser = None
 
     # Clear dewarped image reference
     global _last_dewarped_image
@@ -115,6 +120,7 @@ class Page:
             "textract": self.get_page_tables_textract,
             "textract-pickle-debug": self.get_page_tables_textract_pickle,
             "paddleocr-vl": self.get_page_tables_paddleocr_vl,
+            "glm-ocr": self.get_page_tables_glm_ocr,
         }
 
         tables = get_page_tables_method[self.document.method](**kwargs)
@@ -123,44 +129,27 @@ class Page:
             if kwargs.get("extend_rows"):
                 table.extend_rows()
 
-            is_vl = self.document.method == "paddleocr-vl"
-
-            table_matrix = table.as_clean_matrix(
-                remove_dots_and_commas=False if is_vl else kwargs.get("remove_dots_and_commas")
+            table_matrix = table.as_clean_matrix(kwargs.get("remove_dots_and_commas"))
+            table_matrix = table.overwrite_seminumeric_cells_confidence(
+                table_matrix,
+                kwargs.get("decimal_separator"),
+                kwargs.get("thousands_separator"),
+                kwargs.get("fix_num_misspellings"),
             )
 
-            if is_vl:
-                # PaddleOCR-VL: trust the model output, just try to parse
-                # each cell as a float. No separator stripping or misspelling
-                # substitution — the VL model already "understands" the numbers.
-                for row in table_matrix:
-                    for col in row:
-                        text = col["text"].strip()
-                        try:
-                            col["text"] = float(text)
-                        except ValueError:
-                            pass
-            else:
-                table_matrix = table.overwrite_seminumeric_cells_confidence(
+            if kwargs.get("nlp_postprocess"):
+                table_matrix = table.nlp_postprocess(
                     table_matrix,
-                    kwargs.get("decimal_separator"),
-                    kwargs.get("thousands_separator"),
-                    kwargs.get("fix_num_misspellings"),
+                    kwargs.get("text_language"),
+                    kwargs.get("nlp_postprocess_prompt_file"),
                 )
 
-                if kwargs.get("nlp_postprocess"):
-                    table_matrix = table.nlp_postprocess(
-                        table_matrix,
-                        kwargs.get("text_language"),
-                        kwargs.get("nlp_postprocess_prompt_file"),
-                    )
-
-                table_matrix = table.maybe_parse_numeric_cells(
-                    table_matrix,
-                    kwargs.get("decimal_separator"),
-                    kwargs.get("thousands_separator"),
-                    kwargs.get("fix_num_misspellings"),
-                )
+            table_matrix = table.maybe_parse_numeric_cells(
+                table_matrix,
+                kwargs.get("decimal_separator"),
+                kwargs.get("thousands_separator"),
+                kwargs.get("fix_num_misspellings"),
+            )
 
             table.add_to_sheet(self.page_num, i + 1, table_matrix, table.footer_text)
 
@@ -235,42 +224,6 @@ class Page:
             FeatureTypes=["TABLES"],
         )
 
-    @staticmethod
-    def _run_ocr_for_confidence(image):
-        """Run standalone PP-OCRv5 OCR on an image and return word-level results.
-
-        Returns a list of dicts sorted in reading order (top→bottom, left→right):
-            [{"text": str, "bbox": [x1,y1,x2,y2], "confidence": float}, ...]
-        """
-        from paddleocr import PaddleOCR
-
-        global _paddleocr_ocr_engine
-        if _paddleocr_ocr_engine is None:
-            _paddleocr_ocr_engine = PaddleOCR(lang="en")
-        engine = _paddleocr_ocr_engine
-
-        result = engine.predict(np.array(image))
-        if not result:
-            return []
-
-        res_json = result[0].json["res"]
-        rec_texts = res_json.get("rec_texts", [])
-        rec_scores = res_json.get("rec_scores", [])
-        rec_boxes = res_json.get("rec_boxes", [])
-
-        words = []
-        for text, score, bbox in zip(rec_texts, rec_scores, rec_boxes):
-            # bbox is [x1, y1, x2, y2]
-            words.append({
-                "text": text.strip(),
-                "bbox": bbox,
-                "confidence": score * 100,  # normalise to 0-100 scale
-            })
-
-        # Sort in reading order: top-to-bottom, then left-to-right
-        words.sort(key=lambda w: (w["bbox"][1], w["bbox"][0]))
-        return words
-
     def get_page_tables_paddleocr_vl(self, **kwargs):
         import tempfile
         from paddleocr import PaddleOCRVL
@@ -306,7 +259,6 @@ class Page:
                         markdown_content = block.get("block_content", "")
                         if not markdown_content.strip():
                             continue
-                        print(f"[DEBUG PaddleOCR-VL raw markdown]:\n{markdown_content}\n")
                         bbox = block.get("block_bbox", [0, 0, 0, 0])
                         if hasattr(bbox, "tolist"):
                             bbox = bbox.tolist()
@@ -314,15 +266,143 @@ class Page:
                         t.set_table_from_paddleocr_vl_markdown(markdown_content)
                         tables.append(t)
 
-            # Optionally enrich cells with OCR confidence scores
-            if kwargs.get("use_ocr_confidence") and tables:
-                ocr_words = self._run_ocr_for_confidence(self.page)
-                for t in tables:
-                    t.enrich_with_ocr_confidence(ocr_words)
+            return tables
+        finally:
+            os.unlink(tmp_path)
+
+    def get_page_tables_glm_ocr(self, **kwargs):
+        """Extract tables using the GLM-OCR SDK with local pipeline.
+
+        Requires a running GLM-OCR inference server (vLLM, SGLang, or Ollama).
+        The SDK handles layout detection (PP-DocLayout-V3) locally and sends
+        cropped regions to the OCR server for recognition.
+        """
+        import tempfile
+        import json
+        import yaml
+        from glmocr import GlmOcr
+
+        api_host = kwargs.get("glm_ocr_host", "localhost")
+        api_port = int(kwargs.get("glm_ocr_port", 8080))
+        api_key = kwargs.get("glm_ocr_api_key") or None
+        model_name = kwargs.get("glm_ocr_model", "glm-ocr")
+
+        global _glm_ocr_parser
+        if _glm_ocr_parser is None:
+            # Create a temporary config YAML for the SDK
+            config = {
+                "pipeline": {
+                    "maas": {"enabled": False},
+                    "ocr_api": {
+                        "api_host": api_host,
+                        "api_port": api_port,
+                        "connect_timeout": 300,
+                        "request_timeout": 300,
+                    },
+                    "enable_layout": True,
+                },
+            }
+            if api_key:
+                config["pipeline"]["ocr_api"]["api_key"] = api_key
+            if model_name:
+                config["pipeline"]["ocr_api"]["model"] = model_name
+
+            fd, config_path = tempfile.mkstemp(suffix=".yaml")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    yaml.dump(config, f)
+                _glm_ocr_parser = GlmOcr(config_path=config_path)
+            finally:
+                try:
+                    os.unlink(config_path)
+                except OSError:
+                    pass
+
+        # Save page image to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp_path = tmp.name
+            if isinstance(self.page, Image.Image):
+                self.page.save(tmp_path)
+            else:
+                Image.fromarray(np.array(self.page)).save(tmp_path)
+
+        try:
+            result = _glm_ocr_parser.parse(tmp_path, save_layout_visualization=False)
+
+            tables = []
+
+            # Extract tables from structured JSON result (layout detection mode)
+            json_result = result.json_result
+            if isinstance(json_result, str):
+                try:
+                    json_result = json.loads(json_result)
+                except (json.JSONDecodeError, TypeError):
+                    json_result = []
+
+            if isinstance(json_result, list):
+                for page_data in json_result:
+                    if not isinstance(page_data, list):
+                        continue
+                    for block in page_data:
+                        if not isinstance(block, dict):
+                            continue
+                        if block.get("label") == "table":
+                            content = block.get("content", "")
+                            if not content.strip():
+                                continue
+                            bbox = block.get("bbox_2d") or [0, 0, 0, 0]
+                            if hasattr(bbox, "tolist"):
+                                bbox = bbox.tolist()
+                            t = Table(self.page, self, bbox)
+                            t.set_table_from_paddleocr_vl_markdown(content)
+                            tables.append(t)
+
+            # Fallback: parse tables from the markdown result
+            if not tables and result.markdown_result:
+                tables = self._extract_tables_from_markdown(result.markdown_result)
 
             return tables
         finally:
             os.unlink(tmp_path)
+
+    def _extract_tables_from_markdown(self, markdown_content):
+        """Parse markdown content and extract all table blocks as Table objects."""
+        import re
+
+        tables = []
+        # Match HTML tables
+        html_table_pattern = re.compile(
+            r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE
+        )
+        # Match markdown pipe tables (at least 2 rows with pipes)
+        md_table_pattern = re.compile(
+            r"(?:^|\n)"
+            r"((?:\|[^\n]+\|\s*\n){2,})",
+            re.MULTILINE,
+        )
+
+        found_tables = []
+
+        # Find HTML tables
+        for match in html_table_pattern.finditer(markdown_content):
+            found_tables.append(match.group(0))
+
+        # Find markdown pipe tables (only in non-HTML parts)
+        remaining = html_table_pattern.sub("", markdown_content)
+        for match in md_table_pattern.finditer(remaining):
+            table_text = match.group(1).strip()
+            if table_text:
+                found_tables.append(table_text)
+
+        for table_text in found_tables:
+            bbox = [0, 0, 0, 0]
+            t = Table(self.page, self, bbox)
+            t.set_table_from_paddleocr_vl_markdown(table_text)
+            # Only add if the table has actual data
+            if t.table_data and len(t.table_data) > 0:
+                tables.append(t)
+
+        return tables
 
     def build_textract_tables_from_response(self, response):
         blocks = response["Blocks"]

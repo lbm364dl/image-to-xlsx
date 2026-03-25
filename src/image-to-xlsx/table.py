@@ -28,7 +28,7 @@ class Table:
         self.image = whole_image
         self.table_bbox = table_bbox
 
-        if page.document.method not in ("pdf-text", "paddleocr-vl"):
+        if page.document.method not in ("pdf-text", "paddleocr-vl", "glm-ocr"):
             self.cropped_img = self.image.crop(table_bbox)
 
     def is_numeric_cell(self, text, threshold=0.6):
@@ -153,9 +153,8 @@ class Table:
             [cell_part["confidence"] for cell_part in cell if cell_part["confidence"] is not None]
         )
         confidence = conf_arr.mean() if conf_arr.size > 0 else None
-        joined = " ".join(texts)
         return {
-            "text": joined,
+            "text": " ".join(texts),
             "confidence": confidence if confidence is not None and not np.isnan(confidence) else None,
         }
 
@@ -248,24 +247,10 @@ class Table:
         if not self.is_numeric_cell(text):
             return text, NOT_NUMBER
 
-        # Heuristic: if the thousands_separator appears exactly once AND is
-        # followed by 1 or 2 digits (not 3), it was almost certainly output by
-        # the OCR/VL model as a decimal point rather than a thousands grouping
-        # mark (which always groups digits in sets of 3, e.g. "1,234").
-        # Treat it as the decimal separator in that case.
-        effective_decimal = decimal_separator
-        if thousands_separator and text.count(thousands_separator) == 1:
-            idx = text.rfind(thousands_separator)
-            digits_right = re.sub(r"[^0-9]", "", text[idx + 1:])
-            if len(digits_right) != 3:  # 1, 2 or 4+ → not a real thousands group
-                # Swap roles just for this cell
-                effective_decimal = thousands_separator
-                thousands_separator = ""  # nothing to strip
-
         text = text.replace(thousands_separator, "")
-        if effective_decimal == ",":
+        if decimal_separator == ",":
             one_number = cell["cnt_commas"] <= 1
-            text = text.replace(effective_decimal, ".")
+            text = text.replace(decimal_separator, ".")
         else:
             one_number = cell["cnt_dots"] <= 1
 
@@ -295,10 +280,6 @@ class Table:
 
         Supports HTML tables ("<table>...") and markdown pipe tables.
         """
-        if "206" in markdown_text:
-            idx = markdown_text.find("206")
-            print(f"  [DEBUG RAW MARKDOWN] snippet containing 206: {markdown_text[max(0, idx-10):min(len(markdown_text), idx+15)]!r}")
-
         from html.parser import HTMLParser
         import html
 
@@ -438,51 +419,6 @@ class Table:
                 self.table_data[row_id][col_id].append(
                     {"text": text.strip(), "confidence": confidence}
                 )
-
-    def enrich_with_ocr_confidence(self, ocr_words):
-        """Match OCR words to table cells by fuzzy text matching, assigning confidence.
-
-        Args:
-            ocr_words: list of {"text": str, "bbox": [x1,y1,x2,y2], "confidence": float}
-                       sorted in reading order (top-to-bottom, left-to-right).
-        """
-        from difflib import SequenceMatcher
-
-        if not ocr_words:
-            return
-
-        # Build a consumed-flags array so we greedily consume each OCR word once
-        available = list(range(len(ocr_words)))
-
-        # Walk cells in reading order (row-major)
-        for row_idx in sorted(self.table_data.keys()):
-            for col_idx in sorted(self.table_data[row_idx].keys()):
-                parts = self.table_data[row_idx][col_idx]
-                for part in parts:
-                    if not part["text"].strip():
-                        continue
-
-                    # Find best fuzzy match among available OCR words
-                    best_idx = None
-                    best_ratio = 0.0
-                    for avail_pos, ocr_idx in enumerate(available):
-                        ocr_text = ocr_words[ocr_idx]["text"]
-                        ratio = SequenceMatcher(
-                            None, part["text"].lower(), ocr_text.lower()
-                        ).ratio()
-                        if ratio > best_ratio:
-                            best_ratio = ratio
-                            best_idx = avail_pos
-                        # Perfect match — stop early
-                        if ratio == 1.0:
-                            break
-
-                    # Accept match if similarity is above threshold
-                    if best_idx is not None and best_ratio >= 0.5:
-                        matched_ocr = ocr_words[available[best_idx]]
-                        part["confidence"] = matched_ocr["confidence"]
-                        # Remove from available pool
-                        available.pop(best_idx)
 
     def nlp_postprocess(
         self, table_matrix, text_language="en", nlp_postprocess_prompt_file=None

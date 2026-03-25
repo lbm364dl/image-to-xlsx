@@ -67,12 +67,14 @@ def run(
                 thousands_separator=thousands_separator,
                 fix_num_misspellings=fix_num_misspellings,
                 use_ocr_confidence=kwargs.get("use_ocr_confidence"),
+                show_ocr_bboxes=kwargs.get("show_ocr_bboxes"),
             )
     finally:
-        from page import clear_gpu_memory
+        from page import clear_gpu_memory, _ocr_bbox_debug_images
+        ocr_bbox_images = _ocr_bbox_debug_images.copy()
         clear_gpu_memory()
 
-    return d.workbook, d.footers_workbook, dewarped_images
+    return d.workbook, d.footers_workbook, dewarped_images, ocr_bbox_images
 
 
 def save_output(table_workbook, footers_workbook, output_dir, file_name):
